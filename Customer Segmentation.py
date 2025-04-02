@@ -3,112 +3,177 @@ import pandas as pd
 pd.options.display.float_format = '{:.3f}'.format
 import numpy as np
 
+st.set_page_config(layout="wide") # Optional: Use wider layout
+
 st.title("Customer Segmentation Group 4 ExcelR")
 st.write("Deployment Stage")
 
-
-# Modify the show_duplicate_rows function to use Streamlit elements
-def show_duplicate_rows(data):
-    # Check for duplicate rows
-    duplicate_rows = data[data.duplicated(keep=False)]
-
+# --- Functions (show_duplicate_rows, describe) ---
+# (Keep your existing functions as they were in the previous correct version)
+def show_duplicate_rows(data_df):
+    duplicate_rows = data_df[data_df.duplicated(keep=False)]
     if not duplicate_rows.empty:
-        # Sort the duplicate rows by all columns to group duplicates together
-        duplicate_rows = duplicate_rows.sort_values(by=list(data.columns))
-        st.write("Duplicate rows found:")
-        st.dataframe(duplicate_rows) # Use st.dataframe for tables
+        duplicate_rows = duplicate_rows.sort_values(by=list(data_df.columns))
+        return duplicate_rows # Return the dataframe
     else:
-        st.write("There are no duplicate rows in the dataset.")
+        return None # Return None if no duplicates
 
-def describe(data):
-    # Describe the data, transpose, and fill NaN values
-    description = data.describe(include='all').T.round(3)
-
+def describe(data_df):
+    description = data_df.describe(include='all').T.round(3)
     required_columns = ['top', 'freq', 'first', 'last']
-    if all(col in description.columns for col in required_columns):
-        description.drop(['top','freq','first','last'],axis=1,inplace=True)
-    elif 'unique' not in description.columns:
-        description.insert(1, 'unique', np.nan)
-
-    description['unique'] = description['unique'].fillna(data.nunique())
-
-    # Get data types from data.info()
-    data_types = data.dtypes
-
-    # Insert data types as a new column
-    description.insert(1, 'dtype', data_types)
-
-    # Calculate null value percentages
-    null_percentages = data.isnull().sum() / len(data) * 100
-
-    # Insert null value percentages as the 2nd column
-    description.insert(1, 'na %', null_percentages.round(3))
-
-    # Print the resulting DataFrame
-    return(description)
-
-
-data = pd.read_excel('marketing_campaign1.xlsx')
-
-option = st.selectbox(
-    'Show',
-    ('head', 'tail', 'sample'))
-
-number = st.slider('number of rows', 1, 100, 5)
-
-
-if option == 'head':
-    st.write(data.head(number))
-elif option == 'tail':
-    st.write(data.tail(number))
-elif option == 'sample':
-    st.write(data.sample(number))
-
-if st.button('Describe Data'):
-    st.dataframe(describe(data))
-
-
-# Add this section to your Streamlit app script:
-st.markdown("---") # Optional: Adds a visual separator
-st.subheader("Check for Duplicate Rows")
-if st.button('Show Duplicate Rows'):
-    show_duplicate_rows(data) # Call the modified function
-
-# Add this section to your Streamlit app script
-
-st.markdown("---") # Optional: Adds a visual separator
-st.subheader("Handle Missing Values")
-
-# Check if 'data' is loaded (assuming you load it into st.session_state as 'data')
-# If not using session state, replace st.session_state.data with your DataFrame variable (e.g., 'data')
-# but be aware changes might not persist across interactions without session state.
-if 'data' in st.session_state and isinstance(st.session_state.data, pd.DataFrame):
-    # Check if 'Income' column exists
-    if 'Income' in st.session_state.data.columns:
-        initial_na_count = st.session_state.data['Income'].isnull().sum()
-        st.write(f"Current missing values in 'Income': {initial_na_count}")
-
-        # Ask the question and provide the button only if there are NAs
-        if initial_na_count > 0:
-            st.write("Do you want to fill missing 'Income' values with the median?")
-            if st.button("Yes, fill NA in 'Income'"):
-                try:
-                    median_income = st.session_state.data['Income'].median()
-                    # Fill NA by assigning back to the column in session state
-                    # Using inplace=True with session state can sometimes be tricky, direct assignment is safer
-                    st.session_state.data['Income'] = st.session_state.data['Income'].fillna(median_income)
-
-                    # Confirmation
-                    final_na_count = st.session_state.data['Income'].isnull().sum()
-                    st.success(f"Missing 'Income' values filled with median ({median_income:.3f}).")
-                    st.write(f"Missing values in 'Income' after filling: {final_na_count}")
-                    # Force rerun to ensure all parts of the app update
-                    st.rerun()
-                except Exception as e:
-                     st.error(f"An error occurred while filling NA values: {e}")
-        else:
-            st.info("No missing values found in the 'Income' column to fill.")
+    cols_to_drop = [col for col in required_columns if col in description.columns]
+    if cols_to_drop:
+        description = description.drop(columns=cols_to_drop)
+    if 'unique' not in description.columns:
+        description.insert(1, 'unique', data_df.nunique())
     else:
-        st.warning("Column 'Income' not found in the dataset.")
+        description['unique'] = description['unique'].fillna(data_df.nunique())
+    data_types = data_df.dtypes
+    description.insert(1, 'dtype', data_types)
+    null_percentages = data_df.isnull().sum() * 100 / len(data_df)
+    description.insert(1, 'na %', null_percentages.round(3))
+    return description
+# --- End Functions ---
+
+# --- Load data ---
+@st.cache_data
+def load_data(file_path):
+    try:
+        return pd.read_excel(file_path)
+    except FileNotFoundError:
+        st.error(f"Error: '{file_path}' not found.")
+        return None
+    except Exception as e:
+        st.error(f"An error occurred loading the Excel file: {e}")
+        return None
+
+# --- Initialize Session State ---
+# Raw data
+if 'data' not in st.session_state:
+    st.session_state.data = load_data('marketing_campaign1.xlsx')
+
+# State for description output
+if 'description_df' not in st.session_state:
+    st.session_state.description_df = None
+if 'show_description' not in st.session_state:
+    st.session_state.show_description = False
+
+# State for duplicate rows output
+if 'duplicate_rows_df' not in st.session_state:
+    st.session_state.duplicate_rows_df = None
+if 'show_duplicates' not in st.session_state:
+    st.session_state.show_duplicates = False
+# --- End Initialization ---
+
+
+# --- Main App Logic ---
+if st.session_state.data is not None:
+
+    # --- Part 1: Data Exploration View (Always updates on interaction) ---
+    st.header("Explore Data")
+    col1, col2 = st.columns([1, 3]) # Adjust column widths
+    with col1:
+        option = st.selectbox(
+            'Show', ('head', 'tail', 'sample'), key='display_option'
+        )
+        max_rows = len(st.session_state.data)
+        current_slider_value = st.session_state.get('num_rows', 5)
+        number = st.slider(
+            'Number of rows', 1, max_rows, min(current_slider_value, max_rows), key='num_rows'
+        )
+
+    with col2:
+        st.subheader(f"Displaying {option} ({number} rows)")
+        current_df = st.session_state.data
+        if option == 'head':
+            st.dataframe(current_df.head(number))
+        elif option == 'tail':
+            st.dataframe(current_df.tail(number))
+        elif option == 'sample':
+            sample_size = min(number, len(current_df))
+            if sample_size > 0:
+                 st.dataframe(current_df.sample(sample_size))
+            else:
+                 st.write("No data to sample.")
+
+    st.markdown("---")
+
+    # --- Part 2: Action Buttons ---
+    st.header("Data Analysis Actions")
+    b_col1, b_col2, b_col3 = st.columns(3)
+
+    with b_col1:
+        if st.button('Generate Data Description'):
+            # Calculate, store result in session state, set flag to show
+            st.session_state.description_df = describe(st.session_state.data)
+            st.session_state.show_description = True
+            # Clear other persistent outputs if desired when generating a new one
+            # st.session_state.show_duplicates = False
+
+    with b_col2:
+        if st.button('Find Duplicate Rows'):
+            # Calculate, store result, set flag
+            st.session_state.duplicate_rows_df = show_duplicate_rows(st.session_state.data)
+            st.session_state.show_duplicates = True
+            # Clear other persistent outputs if desired
+            # st.session_state.show_description = False
+
+    with b_col3:
+        st.subheader("Handle Missing Income") # Keep this simpler for now
+        if 'Income' in st.session_state.data.columns:
+            initial_na_count = st.session_state.data['Income'].isnull().sum()
+            st.write(f"Missing 'Income': {initial_na_count}")
+            if initial_na_count > 0:
+                if st.button("Fill Income NA with Median", key='fill_income_na'):
+                    median_income = st.session_state.data['Income'].median()
+                    st.session_state.data['Income'] = st.session_state.data['Income'].fillna(median_income)
+                    st.success(f"Filled NA with median ({median_income:.3f}).")
+                    # Clear potentially outdated persistent results after modifying data
+                    st.session_state.show_description = False
+                    st.session_state.show_duplicates = False
+                    st.rerun()
+            else:
+                st.info("No missing 'Income' values.")
+        else:
+            st.warning("Column 'Income' not found.")
+
+    st.markdown("---")
+
+    # --- Part 3: Persistent Display Areas ---
+    st.header("Analysis Results")
+
+    # Display Area for Description
+    # Check the flag first
+    if st.session_state.get('show_description', False):
+        st.subheader("Data Description")
+        # Check if the result actually exists
+        if st.session_state.description_df is not None:
+            st.dataframe(st.session_state.description_df)
+            # Add button to hide this specific result
+            if st.button("Hide Description", key="hide_desc_btn"):
+                st.session_state.show_description = False
+                st.rerun() # Rerun immediately to hide it
+        else:
+            # This case shouldn't happen with current logic, but good practice
+            st.warning("Description requested but no data available.")
+            st.session_state.show_description = False # Reset flag
+
+
+    # Display Area for Duplicates
+    # Check the flag
+    if st.session_state.get('show_duplicates', False):
+        st.subheader("Duplicate Rows Analysis")
+        # Check if result exists (it could be None if no duplicates found)
+        if st.session_state.duplicate_rows_df is not None:
+            st.write("Duplicate rows found:")
+            st.dataframe(st.session_state.duplicate_rows_df)
+        else:
+            st.info("No duplicate rows were found in the dataset.")
+        # Add button to hide this result section
+        if st.button("Hide Duplicates Info", key="hide_dupl_btn"):
+            st.session_state.show_duplicates = False
+            st.rerun() # Rerun immediately to hide it
+
+
 else:
-    st.warning("Data not loaded or not available in session state.")
+    st.error("Data could not be loaded. Cannot proceed.")
