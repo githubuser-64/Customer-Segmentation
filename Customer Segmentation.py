@@ -63,3 +63,5 @@ elif option == 'tail':
 elif option == 'sample':
     st.write(data.sample(number))
 
+if st.button('Describe Data'):
+    describe(data)
