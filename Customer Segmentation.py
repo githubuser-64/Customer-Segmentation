@@ -7,17 +7,18 @@ st.title("Customer Segmentation Group 4 ExcelR")
 st.write("Deployment Stage")
 
 
+# Modify the show_duplicate_rows function to use Streamlit elements
 def show_duplicate_rows(data):
     # Check for duplicate rows
     duplicate_rows = data[data.duplicated(keep=False)]
-    # Sort the duplicate rows by all columns to group duplicates together
-    duplicate_rows = duplicate_rows.sort_values(by=list(data.columns))
 
-    if len(duplicate_rows) > 0:
-        print('All rows which occur more than once :')
-        display(duplicate_rows)
+    if not duplicate_rows.empty:
+        # Sort the duplicate rows by all columns to group duplicates together
+        duplicate_rows = duplicate_rows.sort_values(by=list(data.columns))
+        st.write("Duplicate rows found:")
+        st.dataframe(duplicate_rows) # Use st.dataframe for tables
     else:
-        print('There are no duplicate rows in the dataset.')
+        st.write("There are no duplicate rows in the dataset.")
 
 def describe(data):
     # Describe the data, transpose, and fill NaN values
@@ -65,3 +66,10 @@ elif option == 'sample':
 
 if st.button('Describe Data'):
     st.dataframe(describe(data))
+
+
+# Add this section to your Streamlit app script:
+st.markdown("---") # Optional: Adds a visual separator
+st.subheader("Check for Duplicate Rows")
+if st.button('Show Duplicate Rows'):
+    show_duplicate_rows(data) # Call the modified function
