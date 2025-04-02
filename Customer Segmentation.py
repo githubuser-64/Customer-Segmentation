@@ -44,7 +44,7 @@ def describe(data):
     description.insert(1, 'na %', null_percentages.round(3))
 
     # Print the resulting DataFrame
-    display(description)
+    return(description)
 
 
 data = pd.read_excel('marketing_campaign1.xlsx')
@@ -64,4 +64,4 @@ elif option == 'sample':
     st.write(data.sample(number))
 
 if st.button('Describe Data'):
-    st.write(describe(data))
+    st.dataframe(describe(data))
