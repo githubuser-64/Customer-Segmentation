@@ -1557,19 +1557,3 @@ with st.expander("Show RFM Analysis", expanded=False):
 
 
 # --- End of the main `if st.session_state.data is not None:` block ---
-
-# --- Add this AT THE VERY END of your script (outside all ifs) ---
-# This ensures the sidebar is always shown
-st.sidebar.markdown("---")
-st.sidebar.header("Libraries Needed")
-st.sidebar.code("""
-streamlit
-pandas
-numpy
-openpyxl
-matplotlib
-seaborn
-plotly
-# nbformat # Only if needed
-""", language="text")
-st.sidebar.markdown("Save the above content as `requirements.txt` for Streamlit Cloud.")
