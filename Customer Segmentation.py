@@ -3,7 +3,8 @@ import pandas as pd
 pd.options.display.float_format = '{:.3f}'.format
 import numpy as np
 
-st.title("Customer Segmentation")
+st.title("Customer Segmentation Group 4 ExcelR")
+st.write("Deployment Stage")
 
 
 def show_duplicate_rows(data):
