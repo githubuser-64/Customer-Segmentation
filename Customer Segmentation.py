@@ -51,4 +51,4 @@ def describe(data):
 
 data = pd.read_excel('marketing_campaign1.xlsx')
 
-st.write(df)
+st.write(data)
