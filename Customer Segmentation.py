@@ -3,10 +3,7 @@ import pandas as pd
 pd.options.display.float_format = '{:.3f}'.format
 import numpy as np
 
-st.title("🎈 My Customer Segmentation App")
-st.write(
-    "Your task includes creating a Streamlit app in Python that involves loading your trained model and setting up user inputs for predictions.  [docs.streamlit.io](https://docs.streamlit.io/)."
-)
+st.title("Customer Segmentation")
 
 
 def show_duplicate_rows(data):
