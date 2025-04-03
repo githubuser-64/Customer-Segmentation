@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 pd.options.display.float_format = '{:.3f}'.format
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
 
 st.set_page_config(layout="wide") # Optional: Use wider layout
 
@@ -629,6 +633,78 @@ def load_data(file_path):
 # Raw data
 if 'data' not in st.session_state:
     st.session_state.data = load_data('marketing_campaign1.xlsx')
+# --- Add this within the # --- Initialize Session State --- section ---
+
+# State for Products Analysis
+if 'product_hist_fig' not in st.session_state: st.session_state.product_hist_fig = None
+if 'show_product_hist' not in st.session_state: st.session_state.show_product_hist = False
+if 'product_pie_fig' not in st.session_state: st.session_state.product_pie_fig = None
+if 'show_product_pie' not in st.session_state: st.session_state.show_product_pie = False
+if 'product_stacked_hist_fig' not in st.session_state: st.session_state.product_stacked_hist_fig = None
+if 'show_product_stacked_hist' not in st.session_state: st.session_state.show_product_stacked_hist = False
+if 'product_log_hist_fig' not in st.session_state: st.session_state.product_log_hist_fig = None
+if 'show_product_log_hist' not in st.session_state: st.session_state.show_product_log_hist = False
+
+# State for People Analysis
+if 'people_hist_fig' not in st.session_state: st.session_state.people_hist_fig = None
+if 'show_people_hist' not in st.session_state: st.session_state.show_people_hist = False
+if 'people_income_log_hist_fig' not in st.session_state: st.session_state.people_income_log_hist_fig = None
+if 'show_people_income_log_hist' not in st.session_state: st.session_state.show_people_income_log_hist = False
+if 'people_sorted_df' not in st.session_state: st.session_state.people_sorted_df = None
+if 'show_people_sorted' not in st.session_state: st.session_state.show_people_sorted = False
+
+# State for Age Analysis
+if 'age_dt_birth_df' not in st.session_state: st.session_state.age_dt_birth_df = None
+if 'show_age_dt_birth' not in st.session_state: st.session_state.show_age_dt_birth = False
+if 'age_hist_fig' not in st.session_state: st.session_state.age_hist_fig = None
+if 'show_age_hist' not in st.session_state: st.session_state.show_age_hist = False
+if 'enroll_year_hist_fig' not in st.session_state: st.session_state.enroll_year_hist_fig = None
+if 'show_enroll_year_hist' not in st.session_state: st.session_state.show_enroll_year_hist = False
+
+# State for Circumstances Analysis
+if 'circumstances_bar_fig' not in st.session_state: st.session_state.circumstances_bar_fig = None
+if 'show_circumstances_bar' not in st.session_state: st.session_state.show_circumstances_bar = False
+
+# State for Promotion Analysis
+if 'promotion_bar_fig' not in st.session_state: st.session_state.promotion_bar_fig = None
+if 'show_promotion_bar' not in st.session_state: st.session_state.show_promotion_bar = False
+
+# State for Place Analysis
+if 'place_bar_fig' not in st.session_state: st.session_state.place_bar_fig = None
+if 'show_place_bar' not in st.session_state: st.session_state.show_place_bar = False
+if 'place_pie_fig' not in st.session_state: st.session_state.place_pie_fig = None
+if 'show_place_pie' not in st.session_state: st.session_state.show_place_pie = False
+
+# State for Feature Engineering and People's Actions
+if 'data_copy_engineered' not in st.session_state: st.session_state.data_copy_engineered = None # Store the engineered df
+if 'feature_engineering_done' not in st.session_state: st.session_state.feature_engineering_done = False
+if 'actions_eng_df' not in st.session_state: st.session_state.actions_eng_df = None
+if 'show_actions_eng' not in st.session_state: st.session_state.show_actions_eng = False
+if 'actions_tenure_hist_fig' not in st.session_state: st.session_state.actions_tenure_hist_fig = None
+if 'show_actions_tenure_hist' not in st.session_state: st.session_state.show_actions_tenure_hist = False
+if 'actions_no_visits_df' not in st.session_state: st.session_state.actions_no_visits_df = None
+if 'show_actions_no_visits' not in st.session_state: st.session_state.show_actions_no_visits = False
+if 'actions_recency_hist_fig' not in st.session_state: st.session_state.actions_recency_hist_fig = None
+if 'show_actions_recency_hist' not in st.session_state: st.session_state.show_actions_recency_hist = False
+if 'actions_complain_visits_bar_fig' not in st.session_state: st.session_state.actions_complain_visits_bar_fig = None
+if 'show_actions_complain_visits_bar' not in st.session_state: st.session_state.show_actions_complain_visits_bar = False
+
+# State for Cost/Revenue
+if 'cost_rev_hist_fig' not in st.session_state: st.session_state.cost_rev_hist_fig = None
+if 'show_cost_rev_hist' not in st.session_state: st.session_state.show_cost_rev_hist = False
+
+# State for RFM Analysis
+if 'rfm_calculated' not in st.session_state: st.session_state.rfm_calculated = False # Flag if RFM is done on engineered data
+if 'rfm_df' not in st.session_state: st.session_state.rfm_df = None
+if 'show_rfm_df' not in st.session_state: st.session_state.show_rfm_df = False
+if 'rfm_ranks_df' not in st.session_state: st.session_state.rfm_ranks_df = None
+if 'show_rfm_ranks' not in st.session_state: st.session_state.show_rfm_ranks = False
+if 'rfm_scatter_fig' not in st.session_state: st.session_state.rfm_scatter_fig = None
+if 'show_rfm_scatter' not in st.session_state: st.session_state.show_rfm_scatter = False
+if 'rfm_3d_scatter_fig' not in st.session_state: st.session_state.rfm_3d_scatter_fig = None
+if 'show_rfm_3d_scatter' not in st.session_state: st.session_state.show_rfm_3d_scatter = False
+if 'rfm_3d_interactive_fig' not in st.session_state: st.session_state.rfm_3d_interactive_fig = None
+if 'show_rfm_3d_interactive' not in st.session_state: st.session_state.show_rfm_3d_interactive = False
 
 # State for description output
 if 'description_df' not in st.session_state:
@@ -753,807 +829,721 @@ if st.session_state.data is not None:
             st.rerun() # Rerun immediately to hide it
 
 
+    # --- Add these sections within the main `if st.session_state.data is not None:` block ---
+    
+    # =========================================
+    # Section: Products Analysis
+    # =========================================
+    st.markdown("---")
+    st.header("Products Analysis")
+    with st.expander("Show Products Analysis", expanded=False):
+        st.markdown("""
+        ### Products
+        | Attribute | Description |
+        |---|---|
+        | MntWines | Amount spent on wine in last 2 years |
+        | MntFruits | Amount spent on fruits in last 2 years |
+        | MntMeatProducts | Amount spent on meat in last 2 years |
+        | MntFishProducts | Amount spent on fish in last 2 years |
+        | MntSweetProducts | Amount spent on sweets in last 2 years |
+        | MntGoldProds | Amount spent on gold in last 2 years |
+        """)
+    
+        # --- Action Buttons for Products ---
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+        with col_p1:
+            if st.button("Product Spending Histogram", key="show_prod_hist_btn"):
+                data_to_plot = st.session_state.data.iloc[:,9:15]
+                st.session_state.product_hist_fig = plot_histogram(data_to_plot) # Assumes returns fig
+                st.session_state.show_product_hist = True
+        with col_p2:
+             if st.button("Product Shares Pie Chart", key="show_prod_pie_btn"):
+                st.session_state.product_pie_fig = plot_pie_chart(st.session_state.data.iloc[:,9:15],title='Shares of Different Product Categories',variable_name='Total Value of Products',variable_name_X=-1.4,variable_name_Y=1) # Assumes returns fig
+                st.session_state.show_product_pie = True
+        with col_p3:
+            if st.button("Product Stacked Histogram", key="show_prod_stack_btn"):
+                data_copy_prod = st.session_state.data.copy() # Use a local copy
+                st.session_state.product_stacked_hist_fig = plot_stacked_histogram(data_copy_prod) # Assumes returns fig
+                st.session_state.show_product_stacked_hist = True
+        with col_p4:
+            if st.button("Log-Transformed Product Hist", key="show_prod_log_btn"):
+                 data_log_prod = st.session_state.data.copy()
+                 for col in ['MntWines', 'MntFruits', 'MntMeatProducts', 'MntFishProducts', 'MntSweetProducts', 'MntGoldProds']:
+                     data_log_prod[f'log_transformed_{col}'] = np.log1p(data_log_prod[col])
+                 st.session_state.product_log_hist_fig = plot_histogram(data_log_prod.iloc[:,29:35]) # Assumes returns fig
+                 st.session_state.show_product_log_hist = True
+    
+        # --- Persistent Display Area for Products ---
+        if st.session_state.get('show_product_hist', False):
+            st.subheader("Product Spending Distribution")
+            if st.session_state.product_hist_fig:
+                st.pyplot(st.session_state.product_hist_fig) # Use st.pyplot for matplotlib
+                if st.button("Hide Product Histogram", key="hide_prod_hist_btn"):
+                    st.session_state.show_product_hist = False
+                    st.rerun()
+            else: st.warning("Generate histogram first.")
+    
+        if st.session_state.get('show_product_pie', False):
+            st.subheader("Product Shares Pie Chart")
+            if st.session_state.product_pie_fig:
+                st.plotly_chart(st.session_state.product_pie_fig) # Use st.plotly_chart for Plotly
+                if st.button("Hide Product Pie Chart", key="hide_prod_pie_btn"):
+                    st.session_state.show_product_pie = False
+                    st.rerun()
+            else: st.warning("Generate pie chart first.")
+    
+        if st.session_state.get('show_product_stacked_hist', False):
+            st.subheader("Product Stacked Histogram")
+            if st.session_state.product_stacked_hist_fig:
+                st.pyplot(st.session_state.product_stacked_hist_fig)
+                if st.button("Hide Product Stacked Hist", key="hide_prod_stack_btn"):
+                    st.session_state.show_product_stacked_hist = False
+                    st.rerun()
+            else: st.warning("Generate stacked histogram first.")
+    
+        if st.session_state.get('show_product_log_hist', False):
+            st.subheader("Log-Transformed Product Spending Distribution")
+            if st.session_state.product_log_hist_fig:
+                st.pyplot(st.session_state.product_log_hist_fig)
+                if st.button("Hide Log Product Hist", key="hide_prod_log_btn"):
+                    st.session_state.show_product_log_hist = False
+                    st.rerun()
+            else: st.warning("Generate log histogram first.")
+    
+    # =========================================
+    # Section: People Analysis
+    # =========================================
+    st.markdown("---")
+    st.header("People Analysis")
+    with st.expander("Show People Analysis", expanded=False):
+        st.markdown("""
+        ### People
+        | Attribute | Description |
+        |---|---|
+        | ID | Customer's unique identifier |
+        | Year_Birth | Customer's birth year |
+        | Education | Customer's education level |
+        | Marital_Status | Customer's marital status |
+        | Income | Customer's yearly household income |
+        | Kidhome | Number of children in customer's household |
+        | Teenhome | Number of teenagers in customer's household |
+        | Dt_Customer | Date of customer's enrollment with the company |
+        """)
+    
+        # --- Action Buttons for People ---
+        col_pe1, col_pe2, col_pe3 = st.columns(3)
+        with col_pe1:
+            if st.button("Birth Year/Income Histogram", key="show_people_hist_btn"):
+                data_to_plot = st.session_state.data[['Year_Birth', 'Income']].dropna() # Handle potential NA in Income for plot
+                st.session_state.people_hist_fig = plot_histogram(data_to_plot)
+                st.session_state.show_people_hist = True
+        with col_pe2:
+            if st.button("Log-Transformed Income Hist", key="show_people_income_log_btn"):
+                data_log_income = st.session_state.data[['Income']].dropna().copy() # Handle NA
+                data_log_income['log_transformed_income'] = np.log1p(data_log_income['Income'])
+                st.session_state.people_income_log_hist_fig = plot_histogram(data_log_income[['log_transformed_income']])
+                st.session_state.show_people_income_log_hist = True
+        with col_pe3:
+            if st.button("Show Data Sorted by Birth Year", key="show_people_sorted_btn"):
+                data_sorted = st.session_state.data.sort_values(by='Year_Birth')
+                st.session_state.people_sorted_df = data_sorted
+                st.session_state.show_people_sorted = True
+    
+        # --- Persistent Display Area for People ---
+        if st.session_state.get('show_people_hist', False):
+            st.subheader("Birth Year and Income Distribution")
+            if st.session_state.people_hist_fig:
+                st.pyplot(st.session_state.people_hist_fig)
+                if st.button("Hide Birth/Income Hist", key="hide_people_hist_btn"):
+                    st.session_state.show_people_hist = False
+                    st.rerun()
+            else: st.warning("Generate histogram first.")
+    
+        if st.session_state.get('show_people_income_log_hist', False):
+            st.subheader("Log-Transformed Income Distribution")
+            if st.session_state.people_income_log_hist_fig:
+                st.pyplot(st.session_state.people_income_log_hist_fig)
+                if st.button("Hide Log Income Hist", key="hide_people_income_log_btn"):
+                    st.session_state.show_people_income_log_hist = False
+                    st.rerun()
+            else: st.warning("Generate log income histogram first.")
+    
+        if st.session_state.get('show_people_sorted', False):
+            st.subheader("Data Sorted by Birth Year")
+            if st.session_state.people_sorted_df is not None:
+                st.dataframe(st.session_state.people_sorted_df)
+                if st.button("Hide Sorted Data", key="hide_people_sorted_btn"):
+                    st.session_state.show_people_sorted = False
+                    st.rerun()
+            else: st.warning("Generate sorted data first.")
+    
+    # =========================================
+    # Section: Age Analysis
+    # =========================================
+    st.markdown("---")
+    st.header("Age and Enrollment Analysis")
+    with st.expander("Show Age/Enrollment Analysis", expanded=False):
+        st.markdown("""
+        ### How old was the customer on the day of customer's enrollment (enrollment day) with the company?
+        ### Is there a relationship between age on enrollment day and their actual age?
+        We will use a substitute which is the age of all the customers on the last enrollment day in the data set to keep things within the context of the dataset.
+        """)
+    
+        # --- Action Buttons for Age ---
+        col_a1, col_a2, col_a3 = st.columns(3)
+        with col_a1:
+            if st.button("Show Enrollment Date & Birth Year", key="show_age_dt_birth_btn"):
+                st.session_state.age_dt_birth_df = st.session_state.data[['Dt_Customer','Year_Birth']]
+                st.session_state.show_age_dt_birth = True
+        with col_a2:
+            if st.button("Show Age Histograms", key="show_age_hist_btn"):
+                 data_copy_age = st.session_state.data.copy()
+                 data_copy_age['Dt_Customer'] = pd.to_datetime(data_copy_age['Dt_Customer'], errors='coerce') # Ensure datetime
+                 data_copy_age.dropna(subset=['Dt_Customer', 'Year_Birth'], inplace=True) # Drop rows where calculation isn't possible
+                 data_copy_age['Age_On_Enrollment_Day'] = data_copy_age['Dt_Customer'].dt.year - data_copy_age['Year_Birth']
+                 latest_enrollment_date = data_copy_age['Dt_Customer'].max()
+                 data_copy_age['Age_On_Last_Enrollment_Date'] = latest_enrollment_date.year - data_copy_age['Year_Birth']
+                 st.session_state.age_hist_fig = plot_histogram(data_copy_age[['Age_On_Enrollment_Day','Age_On_Last_Enrollment_Date']])
+                 st.session_state.show_age_hist = True
+        with col_a3:
+             if st.button("Show Enrollment Year Histogram", key="show_enroll_year_btn"):
+                 data_copy_enroll = st.session_state.data.copy()
+                 data_copy_enroll['Dt_Customer'] = pd.to_datetime(data_copy_enroll['Dt_Customer'], errors='coerce') # Ensure datetime
+                 data_copy_enroll.dropna(subset=['Dt_Customer'], inplace=True)
+                 data_copy_enroll['Year_Of_Enrollment'] = data_copy_enroll['Dt_Customer'].dt.year
+                 st.session_state.enroll_year_hist_fig = plot_histogram(data_copy_enroll[['Year_Of_Enrollment']])
+                 st.session_state.show_enroll_year_hist = True
+    
+        st.markdown("""
+        *Roughly, the same number of people are in the histogram bins. There seems to be a strong similarity between Age Enrollment and Age Current.*
+        """)
+        st.markdown("""
+        *Now we understand why the Histograms of `Age_On_Enrollment_Day` and `Age_On_Last_Enrollment_Date` are so similar. **All of them were registered in just three years, 2012 to 2014.** *
+        """)
+    
+    
+        # --- Persistent Display Area for Age ---
+        if st.session_state.get('show_age_dt_birth', False):
+            st.subheader("Enrollment Date & Birth Year")
+            if st.session_state.age_dt_birth_df is not None:
+                st.dataframe(st.session_state.age_dt_birth_df)
+                if st.button("Hide Date/Birth Data", key="hide_age_dt_birth_btn"):
+                    st.session_state.show_age_dt_birth = False
+                    st.rerun()
+            else: st.warning("Generate Date/Birth data first.")
+    
+        if st.session_state.get('show_age_hist', False):
+            st.subheader("Age on Enrollment vs. Age on Last Enrollment Date")
+            if st.session_state.age_hist_fig:
+                st.pyplot(st.session_state.age_hist_fig)
+                if st.button("Hide Age Histograms", key="hide_age_hist_btn"):
+                    st.session_state.show_age_hist = False
+                    st.rerun()
+            else: st.warning("Generate age histograms first.")
+    
+        if st.session_state.get('show_enroll_year_hist', False):
+            st.subheader("Year of Enrollment Distribution")
+            if st.session_state.enroll_year_hist_fig:
+                st.pyplot(st.session_state.enroll_year_hist_fig)
+                if st.button("Hide Enrollment Year Hist", key="hide_enroll_year_btn"):
+                    st.session_state.show_enroll_year_hist = False
+                    st.rerun()
+            else: st.warning("Generate enrollment year histogram first.")
+    
+    # =========================================
+    # Section: Circumstances Analysis
+    # =========================================
+    st.markdown("---")
+    st.header("People's Circumstances Analysis")
+    with st.expander("Show Circumstances Analysis", expanded=False):
+        st.markdown("### People's Circumstances or People's Situation")
+    
+        # --- Action Button ---
+        if st.button("Show Circumstances Bar Chart", key="show_circ_bar_btn"):
+            cols_to_plot = ['Education', 'Marital_Status', 'Kidhome', 'Teenhome', 'Complain','NumWebVisitsMonth']
+            # Ensure columns exist and handle potential errors if plot_bar_chart needs specific types
+            valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
+            if valid_cols:
+                 st.session_state.circumstances_bar_fig = plot_bar_chart(st.session_state.data[valid_cols],rotation=15)
+                 st.session_state.show_circumstances_bar = True
+            else:
+                 st.warning(f"Not all required columns found in data: {cols_to_plot}")
+    
+    
+        # --- Persistent Display ---
+        if st.session_state.get('show_circumstances_bar', False):
+            st.subheader("Distribution of Circumstances")
+            if st.session_state.circumstances_bar_fig:
+                st.pyplot(st.session_state.circumstances_bar_fig) # Or st.plotly_chart if it returns Plotly
+                if st.button("Hide Circumstances Chart", key="hide_circ_bar_btn"):
+                    st.session_state.show_circumstances_bar = False
+                    st.rerun()
+            else: st.warning("Generate circumstances chart first.")
+    
+    # =========================================
+    # Section: Promotion Analysis
+    # =========================================
+    st.markdown("---")
+    st.header("Promotion Acceptance Analysis")
+    with st.expander("Show Promotion Analysis", expanded=False):
+        st.markdown("""
+        ### Promotion
+        | Attribute | Description |
+        |---|---|
+        | NumDealsPurchases | Number of purchases made with a discount |
+        | AcceptedCmp1 | 1 if customer accepted the offer in the 1st campaign, 0 otherwise |
+        | AcceptedCmp2 | 1 if customer accepted the offer in the 2nd campaign, 0 otherwise |
+        | AcceptedCmp3 | 1 if customer accepted the offer in the 3rd campaign, 0 otherwise |
+        | AcceptedCmp4 | 1 if customer accepted the offer in the 4th campaign, 0 otherwise |
+        | AcceptedCmp5 | 1 if customer accepted the offer in the 5th campaign, 0 otherwise |
+        | Response | 1 if customer accepted the offer in the last campaign, 0 otherwise |
+        """)
+    
+        # --- Action Button ---
+        if st.button("Show Promotion Bar Chart", key="show_promo_bar_btn"):
+            cols_to_plot = ['NumDealsPurchases','AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response']
+            valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
+            if valid_cols:
+                st.session_state.promotion_bar_fig = plot_bar_chart(st.session_state.data[valid_cols],rotation=0)
+                st.session_state.show_promotion_bar = True
+            else:
+                 st.warning(f"Not all required columns found in data: {cols_to_plot}")
+    
+        # --- Persistent Display ---
+        if st.session_state.get('show_promotion_bar', False):
+            st.subheader("Distribution of Promotion Variables")
+            if st.session_state.promotion_bar_fig:
+                st.pyplot(st.session_state.promotion_bar_fig) # Or st.plotly_chart
+                if st.button("Hide Promotion Chart", key="hide_promo_bar_btn"):
+                    st.session_state.show_promotion_bar = False
+                    st.rerun()
+            else: st.warning("Generate promotion chart first.")
+    
+    # =========================================
+    # Section: Place Analysis
+    # =========================================
+    st.markdown("---")
+    st.header("Place of Purchase Analysis")
+    with st.expander("Show Place Analysis", expanded=False):
+        st.markdown("""
+        ### Place
+        | Attribute | Description |
+        |---|---|
+        | NumWebPurchases | Number of purchases made through the company’s website |
+        | NumCatalogPurchases | Number of purchases made using a catalog |
+        | NumStorePurchases | Number of purchases made directly in stores |
+        | NumDealsPurchases | Number of purchases made with a discount |
+        """)
+    
+        # --- Action Buttons ---
+        col_pl1, col_pl2 = st.columns(2)
+        with col_pl1:
+            if st.button("Show Place Bar Chart", key="show_place_bar_btn"):
+                cols_to_plot = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
+                valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
+                if valid_cols:
+                     st.session_state.place_bar_fig = plot_bar_chart(st.session_state.data[valid_cols],rotation=0)
+                     st.session_state.show_place_bar = True
+                else:
+                     st.warning(f"Not all required columns found in data: {cols_to_plot}")
+        with col_pl2:
+             if st.button("Show Place Pie Chart", key="show_place_pie_btn"):
+                cols_to_plot = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
+                valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
+                if valid_cols:
+                     st.session_state.place_pie_fig = plot_pie_chart(st.session_state.data[valid_cols],title='Shares of different Platforms used for purchase',variable_name='Total Number of Pruchases',variable_name_X=-1.4,variable_name_Y=1)
+                     st.session_state.show_place_pie = True
+                else:
+                     st.warning(f"Not all required columns found in data: {cols_to_plot}")
+    
+        st.markdown("""
+        **Catalog Purchase**
+        - **Definition**: Buying from a catalog or other printed list. Catalog received as a physical copy or a digital copy.
+        - **Customers**: Individuals, businesses.
+        - **Items**: Specific by individuals, bulk orders by businesses.
+        - **Ordering**: Online, in-store, mail.
+        - **Frequency**: Regular purchases.
+        - **Promotion**: Advertise products.
+    
+        [Source](https://oboloo.com/glossary/catalog-purchase/#:~:text=The%20official%20business%20definition%20of,and%20have%20shipped%20to%20them.)
+    
+        #### Most valuable place of purchase
+        (See Pie Chart)
+        """)
+    
+        # --- Persistent Display ---
+        if st.session_state.get('show_place_bar', False):
+            st.subheader("Distribution of Purchases by Place")
+            if st.session_state.place_bar_fig:
+                st.pyplot(st.session_state.place_bar_fig) # Or st.plotly_chart
+                if st.button("Hide Place Bar Chart", key="hide_place_bar_btn"):
+                    st.session_state.show_place_bar = False
+                    st.rerun()
+            else: st.warning("Generate place bar chart first.")
+    
+        if st.session_state.get('show_place_pie', False):
+            st.subheader("Shares of Purchases by Place")
+            if st.session_state.place_pie_fig:
+                st.plotly_chart(st.session_state.place_pie_fig) # Or st.pyplot
+                if st.button("Hide Place Pie Chart", key="hide_place_pie_btn"):
+                    st.session_state.show_place_pie = False
+                    st.rerun()
+            else: st.warning("Generate place pie chart first.")
+    
+    
+    # ==================================================
+    # Section: Feature Engineering & People's Actions
+    # ==================================================
+    st.markdown("---")
+    st.header("Feature Engineering & People's Actions Analysis")
+    with st.expander("Show Actions Analysis", expanded=False):
+        st.markdown("""
+        ### People's Actions
+        | Attribute | Description |
+        |---|---|
+        | Recency | Number of days since customer's last purchase |
+        | Complain | 1 if the customer complained in the last 2 years, 0 otherwise |
+        | NumWebVisitsMonth | Number of visits to company’s website in the last month |
+    
+        
+        """)
+    
+        # --- Button to Perform Feature Engineering ---
+        if st.button("Perform Feature Engineering", key="do_feature_eng"):
+             if st.session_state.data is not None:
+                 try:
+                     data_copy = st.session_state.data.copy() # Start fresh
+    
+                     # Ensure correct dtypes before calculations
+                     data_copy['Dt_Customer'] = pd.to_datetime(data_copy['Dt_Customer'], errors='coerce')
+                     data_copy['Income'] = pd.to_numeric(data_copy['Income'], errors='coerce').fillna(0) # Fill NA income with 0 for ratio calculation safety
+                     numeric_cols = ['MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds',
+                                     'NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases',
+                                     'AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response',
+                                     'Customer_Tenure_months', 'NumWebVisitsMonth', 'Recency']
+                     for col in numeric_cols:
+                         if col in data_copy.columns:
+                             data_copy[col] = pd.to_numeric(data_copy[col], errors='coerce').fillna(0)
+    
+                     data_copy.dropna(subset=['Dt_Customer'], inplace=True) # Need Dt_Customer for tenure
+    
+                     # Calculate Tenure
+                     latest_date = data_copy['Dt_Customer'].max() + pd.DateOffset(days=1)
+                     data_copy['Customer_Tenure_months'] = ((latest_date - data_copy['Dt_Customer']).dt.days / 30.0).astype(float) # Use 30.0 for float division
+    
+                     # Calculate Monetary
+                     Products_columns = ['MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds']
+                     data_copy['Monetary'] = data_copy[Products_columns].sum(axis=1)
+    
+                     # Calculate Avg_Purchase_Per_Month - handle potential division by zero
+                     data_copy['Avg_Purchase_Per_Month'] = np.where(
+                         data_copy['Customer_Tenure_months'] > 0,
+                         round(data_copy['Monetary'] / data_copy['Customer_Tenure_months'], 3),
+                         0 # Set to 0 if tenure is 0 or less
+                     )
+    
+                     # Calculate NumAcceptedCmps
+                     campaign_cols = ['AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response']
+                     data_copy['NumAcceptedCmps'] = data_copy[campaign_cols].sum(axis=1)
+    
+                     # Calculate Avg_Purchase_Per_Month_To_Monthly_Income_Ratio
+                     # Income already handled (fillna(0))
+                     # Check for tenure > 0 and income > 0
+                     data_copy['Avg_Purchase_Per_Month_To_Monthly_Income_Ratio'] = np.where(
+                         (data_copy['Customer_Tenure_months'] > 0) & (data_copy['Income'] > 0),
+                         round(data_copy['Avg_Purchase_Per_Month'] / (data_copy['Income'] / 12.0), 3), # Monthly income estimate
+                         0 # Set to 0 if tenure or income is zero or less
+                     )
+    
+                     # Calculate Ratio_of_Deals_Purchases_to_Total_Purchases
+                     purchase_cols = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
+                     total_purchases = data_copy[purchase_cols].sum(axis=1)
+                     data_copy['Ratio_of_Deals_Purchases_to_Total_Purchases'] = np.where(
+                         total_purchases > 0,
+                         round(data_copy['NumDealsPurchases'] / total_purchases, 3),
+                         0 # Set to 0 if total purchases are 0
+                     )
+    
+                     st.session_state.data_copy_engineered = data_copy
+                     st.session_state.feature_engineering_done = True
+                     # Clear RFM state if features are re-engineered
+                     st.session_state.rfm_calculated = False
+                     st.success("Feature engineering complete. You can now view related analyses.")
+                 except Exception as e:
+                     st.error(f"Error during feature engineering: {e}")
+                     st.session_state.feature_engineering_done = False
+             else:
+                 st.warning("Load data first.")
+    
+        # --- Action Buttons dependent on Feature Engineering ---
+        if st.session_state.get('feature_engineering_done', False):
+            st.markdown("---")
+            st.write("**Analyses based on Engineered Features:**")
+            col_fa1, col_fa2, col_fa3, col_fa4 = st.columns(4)
+            engineered_df = st.session_state.data_copy_engineered # Use the stored engineered df
+    
+            with col_fa1:
+                if st.button("Show Engineered Data Sample", key="show_actions_eng_btn"):
+                    cols_to_show = ['NumWebPurchases','NumCatalogPurchases','NumDealsPurchases','NumStorePurchases','NumWebVisitsMonth','Recency','NumAcceptedCmps','Ratio_of_Deals_Purchases_to_Total_Purchases','Avg_Purchase_Per_Month','Avg_Purchase_Per_Month_To_Monthly_Income_Ratio']
+                    st.session_state.actions_eng_df = engineered_df[cols_to_show].head() # Show head
+                    st.session_state.show_actions_eng = True
+            with col_fa2:
+                if st.button("Show Tenure >= 6m Histograms", key="show_actions_tenure_btn"):
+                     cols_to_plot = ['Avg_Purchase_Per_Month','Avg_Purchase_Per_Month_To_Monthly_Income_Ratio','NumAcceptedCmps','Ratio_of_Deals_Purchases_to_Total_Purchases']
+                     df_filtered = engineered_df[engineered_df['Customer_Tenure_months']>=6]
+                     st.session_state.actions_tenure_hist_fig = plot_histogram(df_filtered[cols_to_plot],title='Analysis of Customer Tenures of at least 6 months')
+                     st.session_state.show_actions_tenure_hist = True
+            with col_fa3:
+                if st.button("Show Recent Customers with 0 Visits", key="show_actions_novisit_btn"):
+                    cols_to_show = ['NumWebPurchases','NumCatalogPurchases','NumDealsPurchases','NumStorePurchases','NumWebVisitsMonth','Recency','Monetary','NumAcceptedCmps','Avg_Purchase_Per_Month','Avg_Purchase_Per_Month_To_Monthly_Income_Ratio']
+                    df_filtered = engineered_df[((engineered_df['Recency'] > 0) & (engineered_df['NumWebVisitsMonth'] == 0))]
+                    st.session_state.actions_no_visits_df = df_filtered[cols_to_show]
+                    st.session_state.show_actions_no_visits = True
+            with col_fa4:
+                # Placeholder for other action buttons if needed
+                pass
+    
+            col_fa5, col_fa6 = st.columns(2)
+            with col_fa5:
+                if st.button("Show Recency Histogram", key="show_actions_recency_btn"):
+                     # Use original data or engineered data? User code used original 'data'
+                     st.session_state.actions_recency_hist_fig = plot_histogram(st.session_state.data[['Recency']])
+                     st.session_state.show_actions_recency_hist = True
+            with col_fa6:
+                if st.button("Show Complain/Visits Bar Chart", key="show_actions_cv_bar_btn"):
+                    # Use original data or engineered data? User code used original 'data'
+                    st.session_state.actions_complain_visits_bar_fig = plot_bar_chart(st.session_state.data[['Complain','NumWebVisitsMonth']],rotation=0)
+                    st.session_state.show_actions_complain_visits_bar = True
+    
+        else:
+            st.info("Perform Feature Engineering first to enable subsequent analyses.")
+    
+    
+        # --- Persistent Display Area for Actions ---
+        if st.session_state.get('show_actions_eng', False):
+            st.subheader("Sample of Engineered Features")
+            if st.session_state.actions_eng_df is not None:
+                st.dataframe(st.session_state.actions_eng_df)
+                if st.button("Hide Engineered Sample", key="hide_actions_eng_btn"):
+                    st.session_state.show_actions_eng = False
+                    st.rerun()
+            else: st.warning("Generate engineered sample first.")
+    
+        if st.session_state.get('show_actions_tenure_hist', False):
+            st.subheader("Analysis for Tenure >= 6 months")
+            if st.session_state.actions_tenure_hist_fig:
+                st.pyplot(st.session_state.actions_tenure_hist_fig)
+                if st.button("Hide Tenure Histograms", key="hide_actions_tenure_btn"):
+                    st.session_state.show_actions_tenure_hist = False
+                    st.rerun()
+            else: st.warning("Generate tenure histograms first.")
+    
+        if st.session_state.get('show_actions_no_visits', False):
+            st.subheader("Recent Customers with 0 Web Visits")
+            if st.session_state.actions_no_visits_df is not None:
+                st.dataframe(st.session_state.actions_no_visits_df)
+                if st.button("Hide No-Visits Data", key="hide_actions_novisit_btn"):
+                    st.session_state.show_actions_no_visits = False
+                    st.rerun()
+            else: st.warning("Generate no-visits data first.")
+    
+        if st.session_state.get('show_actions_recency_hist', False):
+            st.subheader("Recency Distribution")
+            if st.session_state.actions_recency_hist_fig:
+                st.pyplot(st.session_state.actions_recency_hist_fig)
+                if st.button("Hide Recency Hist", key="hide_actions_recency_btn"):
+                    st.session_state.show_actions_recency_hist = False
+                    st.rerun()
+            else: st.warning("Generate recency histogram first.")
+    
+        if st.session_state.get('show_actions_complain_visits_bar', False):
+            st.subheader("Complaints and Web Visits Distribution")
+            if st.session_state.actions_complain_visits_bar_fig:
+                st.pyplot(st.session_state.actions_complain_visits_bar_fig) # Or plotly
+                if st.button("Hide Complain/Visits Chart", key="hide_actions_cv_bar_btn"):
+                    st.session_state.show_actions_complain_visits_bar = False
+                    st.rerun()
+            else: st.warning("Generate complain/visits chart first.")
+    
+    
+    # =========================================
+    # Section: Cost and Revenue
+    # =========================================
+    st.markdown("---")
+    st.header("Cost and Revenue Analysis")
+    with st.expander("Show Cost/Revenue Analysis", expanded=False):
+        st.markdown("""
+        ### Cost and Revenue
+        | Attribute | Description |
+        |---|---|
+        | Z_CostContact | Cost |
+        | Z_Revenue | Revenue |
+        """)
+    
+        # --- Action Button ---
+        if st.button("Show Cost/Revenue Histogram", key="show_costrev_hist_btn"):
+            cols_to_plot = ['Z_CostContact', 'Z_Revenue']
+            valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
+            if valid_cols:
+                 st.session_state.cost_rev_hist_fig = plot_histogram(st.session_state.data[valid_cols])
+                 st.session_state.show_cost_rev_hist = True
+            else:
+                st.warning(f"Cost/Revenue columns not found: {cols_to_plot}")
+    
+        st.markdown("""
+        *The 'Z_CostContact', 'Z_Revenue' variables seem to be average values over all the customers and therefore, <span style="color: red;">of little use</span>.*
+        """, unsafe_allow_html=True) # Allow HTML for color
+    
+        # --- Persistent Display ---
+        if st.session_state.get('show_cost_rev_hist', False):
+            st.subheader("Cost and Revenue Distribution")
+            if st.session_state.cost_rev_hist_fig:
+                st.pyplot(st.session_state.cost_rev_hist_fig)
+                if st.button("Hide Cost/Revenue Hist", key="hide_costrev_hist_btn"):
+                    st.session_state.show_cost_rev_hist = False
+                    st.rerun()
+            else: st.warning("Generate cost/revenue histogram first.")
+    
+    
+    # =========================================
+    # Section: RFM Analysis
+    # =========================================
+    st.markdown("---")
+    st.header("RFM (Recency, Frequency, Monetary) Analysis")
+    with st.expander("Show RFM Analysis", expanded=False):
+        st.markdown("""
+        *(Requires Feature Engineering step to be completed first)*
+        ### Products (Reference for Monetary Calculation)
+        | Attribute | Description |
+        |---|---|
+        | MntWines | Amount spent on wine in last 2 years |
+        | MntFruits | Amount spent on fruits in last 2 years |
+        | MntMeatProducts | Amount spent on meat in last 2 years |
+        | MntFishProducts | Amount spent on fish in last 2 years |
+        | MntSweetProducts | Amount spent on sweets in last 2 years |
+        | MntGoldProds | Amount spent on gold in last 2 years |
+        """)
+    
+        # --- Button to Perform RFM Calculation ---
+        # Requires engineered data first
+        if st.session_state.get('feature_engineering_done', False):
+            if st.button("Calculate RFM Scores and Segments", key="calc_rfm_btn"):
+                try:
+                    # Use the already engineered DataFrame
+                    rfm_data = st.session_state.data_copy_engineered.copy()
+    
+                    # Ensure necessary columns exist from engineering step
+                    required_rfm_cols = ['ID', 'Recency', 'Monetary']
+                    if not all(col in rfm_data.columns for col in required_rfm_cols):
+                         st.error("Required columns (ID, Recency, Monetary) not found in engineered data. Rerun Feature Engineering.")
+                    else:
+                        # Calculate Frequency (if not already done, though it should be in Monetary section)
+                        Place_columns = ['NumDealsPurchases', 'NumWebPurchases','NumCatalogPurchases', 'NumStorePurchases']
+                        rfm_data['Frequency'] = rfm_data[Place_columns].sum(axis=1)
+    
+                        # Store the raw RFM values DataFrame view
+                        st.session_state.rfm_df = rfm_data[['ID','Recency','Frequency','Monetary']]
+    
+                        # --- Assumes rank_group and segment_customer functions are defined ---
+                        rfm_data['Recency_Rank'] = rank_group(rfm_data['Recency'])
+                        rfm_data['Frequency_Rank'] = rank_group(rfm_data['Frequency'])
+                        rfm_data['Monetary_Rank'] = rank_group(rfm_data['Monetary'])
+                        rfm_data['Average_Rank'] = (rfm_data['Recency_Rank'].astype(int) + rfm_data['Frequency_Rank'].astype(int) + rfm_data['Monetary_Rank'].astype(int)) / 3
+                        rfm_data['Segment'] = rfm_data.apply(segment_customer, axis=1)
+                        # --- End of assumed functions ---
+    
+                        # Store the ranked/segmented DataFrame view
+                        selected_columns = ['ID', 'Recency', 'Frequency', 'Monetary', 'Recency_Rank', 'Frequency_Rank', 'Monetary_Rank', 'Segment']
+                        st.session_state.rfm_ranks_df = rfm_data[selected_columns]
+    
+                        # Generate plots and store figures
+                        st.session_state.rfm_scatter_fig = plot_customer_segmentation_scatter_plot(data=rfm_data,x='Recency',y='Frequency',hue='Segment',palette='Set1',s=100)
+                        st.session_state.rfm_3d_scatter_fig = plot_customer_segmentation_3d_scatter_plot(data=rfm_data,x='Recency',y='Frequency',z='Monetary',hue='Segment',palette='Set1',s=100)
+                        # Assuming the interactive plot function returns a Plotly figure
+                        st.session_state.rfm_3d_interactive_fig = plot_customer_segmentation_3d_interactive_scatter_plot(rfm_data[['Recency', 'Frequency', 'Monetary', 'Segment']])
+    
+                        st.session_state.rfm_calculated = True
+                        st.success("RFM analysis complete. You can now view RFM results.")
+    
+                except NameError as ne:
+                     st.error(f"RFM Calculation Error: Function not defined? {ne}. Make sure 'rank_group' and 'segment_customer' are defined.")
+                except Exception as e:
+                     st.error(f"An error occurred during RFM calculation: {e}")
+                     st.session_state.rfm_calculated = False
+        else:
+            st.info("Perform Feature Engineering first to enable RFM Analysis.")
+    
+    
+        # --- Action Buttons to Show RFM Results ---
+        if st.session_state.get('rfm_calculated', False):
+            st.markdown("---")
+            st.write("**RFM Results:**")
+            col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
+            with col_r1:
+                if st.button("Show RFM Values", key="show_rfm_val_btn"): st.session_state.show_rfm_df = True
+            with col_r2:
+                if st.button("Show RFM Ranks/Segments", key="show_rfm_rank_btn"): st.session_state.show_rfm_ranks = True
+            with col_r3:
+                if st.button("Show RFM Scatter Plot", key="show_rfm_scatter_btn"): st.session_state.show_rfm_scatter = True
+            with col_r4:
+                if st.button("Show RFM 3D Scatter", key="show_rfm_3d_btn"): st.session_state.show_rfm_3d_scatter = True
+            with col_r5:
+                if st.button("Show RFM Interactive 3D", key="show_rfm_int_btn"): st.session_state.show_rfm_3d_interactive = True
+        else:
+             st.info("Calculate RFM Scores first to view results.")
+    
+    
+        # --- Persistent Display Area for RFM ---
+        if st.session_state.get('show_rfm_df', False):
+            st.subheader("RFM Values")
+            if st.session_state.rfm_df is not None:
+                st.dataframe(st.session_state.rfm_df.head()) # Show head
+                if st.button("Hide RFM Values", key="hide_rfm_val_btn"):
+                    st.session_state.show_rfm_df = False
+                    st.rerun()
+            else: st.warning("Calculate RFM first.")
+    
+        if st.session_state.get('show_rfm_ranks', False):
+            st.subheader("RFM Ranks and Segments")
+            if st.session_state.rfm_ranks_df is not None:
+                st.dataframe(st.session_state.rfm_ranks_df.head()) # Show head
+                if st.button("Hide RFM Ranks", key="hide_rfm_rank_btn"):
+                    st.session_state.show_rfm_ranks = False
+                    st.rerun()
+            else: st.warning("Calculate RFM first.")
+    
+        if st.session_state.get('show_rfm_scatter', False):
+            st.subheader("RFM Scatter Plot (Recency vs Frequency)")
+            if st.session_state.rfm_scatter_fig:
+                st.pyplot(st.session_state.rfm_scatter_fig) # Assuming matplotlib
+                if st.button("Hide RFM Scatter", key="hide_rfm_scatter_btn"):
+                    st.session_state.show_rfm_scatter = False
+                    st.rerun()
+            else: st.warning("Calculate RFM first.")
+    
+        if st.session_state.get('show_rfm_3d_scatter', False):
+            st.subheader("RFM 3D Scatter Plot")
+            if st.session_state.rfm_3d_scatter_fig:
+                # 3D plots with matplotlib might not render well directly in st.pyplot.
+                # Consider saving as image or using Plotly if possible.
+                # For now, assuming st.pyplot might work for basic 3D.
+                st.pyplot(st.session_state.rfm_3d_scatter_fig)
+                if st.button("Hide RFM 3D Scatter", key="hide_rfm_3d_btn"):
+                    st.session_state.show_rfm_3d_scatter = False
+                    st.rerun()
+            else: st.warning("Calculate RFM first.")
+    
+        if st.session_state.get('show_rfm_3d_interactive', False):
+            st.subheader("RFM Interactive 3D Scatter Plot")
+            if st.session_state.rfm_3d_interactive_fig:
+                st.plotly_chart(st.session_state.rfm_3d_interactive_fig) # Assuming Plotly
+                if st.button("Hide RFM Interactive 3D", key="hide_rfm_int_btn"):
+                    st.session_state.show_rfm_3d_interactive = False
+                    st.rerun()
+            else: st.warning("Calculate RFM first.")
+    
+    
+    # --- End of the main `if st.session_state.data is not None:` block ---
+
 else:
     st.error("Data could not be loaded. Cannot proceed.")
-
-
-# --- Add this near the top with other imports ---
-import matplotlib.pyplot as plt
-import seaborn as sns
-import plotly.express as px
-import plotly.graph_objects as go
-# Import your custom plotting functions here, e.g.:
-# from my_plot_functions import plot_histogram, plot_pie_chart, ...
-
-# --- Add this within the # --- Initialize Session State --- section ---
-
-# State for Products Analysis
-if 'product_hist_fig' not in st.session_state: st.session_state.product_hist_fig = None
-if 'show_product_hist' not in st.session_state: st.session_state.show_product_hist = False
-if 'product_pie_fig' not in st.session_state: st.session_state.product_pie_fig = None
-if 'show_product_pie' not in st.session_state: st.session_state.show_product_pie = False
-if 'product_stacked_hist_fig' not in st.session_state: st.session_state.product_stacked_hist_fig = None
-if 'show_product_stacked_hist' not in st.session_state: st.session_state.show_product_stacked_hist = False
-if 'product_log_hist_fig' not in st.session_state: st.session_state.product_log_hist_fig = None
-if 'show_product_log_hist' not in st.session_state: st.session_state.show_product_log_hist = False
-
-# State for People Analysis
-if 'people_hist_fig' not in st.session_state: st.session_state.people_hist_fig = None
-if 'show_people_hist' not in st.session_state: st.session_state.show_people_hist = False
-if 'people_income_log_hist_fig' not in st.session_state: st.session_state.people_income_log_hist_fig = None
-if 'show_people_income_log_hist' not in st.session_state: st.session_state.show_people_income_log_hist = False
-if 'people_sorted_df' not in st.session_state: st.session_state.people_sorted_df = None
-if 'show_people_sorted' not in st.session_state: st.session_state.show_people_sorted = False
-
-# State for Age Analysis
-if 'age_dt_birth_df' not in st.session_state: st.session_state.age_dt_birth_df = None
-if 'show_age_dt_birth' not in st.session_state: st.session_state.show_age_dt_birth = False
-if 'age_hist_fig' not in st.session_state: st.session_state.age_hist_fig = None
-if 'show_age_hist' not in st.session_state: st.session_state.show_age_hist = False
-if 'enroll_year_hist_fig' not in st.session_state: st.session_state.enroll_year_hist_fig = None
-if 'show_enroll_year_hist' not in st.session_state: st.session_state.show_enroll_year_hist = False
-
-# State for Circumstances Analysis
-if 'circumstances_bar_fig' not in st.session_state: st.session_state.circumstances_bar_fig = None
-if 'show_circumstances_bar' not in st.session_state: st.session_state.show_circumstances_bar = False
-
-# State for Promotion Analysis
-if 'promotion_bar_fig' not in st.session_state: st.session_state.promotion_bar_fig = None
-if 'show_promotion_bar' not in st.session_state: st.session_state.show_promotion_bar = False
-
-# State for Place Analysis
-if 'place_bar_fig' not in st.session_state: st.session_state.place_bar_fig = None
-if 'show_place_bar' not in st.session_state: st.session_state.show_place_bar = False
-if 'place_pie_fig' not in st.session_state: st.session_state.place_pie_fig = None
-if 'show_place_pie' not in st.session_state: st.session_state.show_place_pie = False
-
-# State for Feature Engineering and People's Actions
-if 'data_copy_engineered' not in st.session_state: st.session_state.data_copy_engineered = None # Store the engineered df
-if 'feature_engineering_done' not in st.session_state: st.session_state.feature_engineering_done = False
-if 'actions_eng_df' not in st.session_state: st.session_state.actions_eng_df = None
-if 'show_actions_eng' not in st.session_state: st.session_state.show_actions_eng = False
-if 'actions_tenure_hist_fig' not in st.session_state: st.session_state.actions_tenure_hist_fig = None
-if 'show_actions_tenure_hist' not in st.session_state: st.session_state.show_actions_tenure_hist = False
-if 'actions_no_visits_df' not in st.session_state: st.session_state.actions_no_visits_df = None
-if 'show_actions_no_visits' not in st.session_state: st.session_state.show_actions_no_visits = False
-if 'actions_recency_hist_fig' not in st.session_state: st.session_state.actions_recency_hist_fig = None
-if 'show_actions_recency_hist' not in st.session_state: st.session_state.show_actions_recency_hist = False
-if 'actions_complain_visits_bar_fig' not in st.session_state: st.session_state.actions_complain_visits_bar_fig = None
-if 'show_actions_complain_visits_bar' not in st.session_state: st.session_state.show_actions_complain_visits_bar = False
-
-# State for Cost/Revenue
-if 'cost_rev_hist_fig' not in st.session_state: st.session_state.cost_rev_hist_fig = None
-if 'show_cost_rev_hist' not in st.session_state: st.session_state.show_cost_rev_hist = False
-
-# State for RFM Analysis
-if 'rfm_calculated' not in st.session_state: st.session_state.rfm_calculated = False # Flag if RFM is done on engineered data
-if 'rfm_df' not in st.session_state: st.session_state.rfm_df = None
-if 'show_rfm_df' not in st.session_state: st.session_state.show_rfm_df = False
-if 'rfm_ranks_df' not in st.session_state: st.session_state.rfm_ranks_df = None
-if 'show_rfm_ranks' not in st.session_state: st.session_state.show_rfm_ranks = False
-if 'rfm_scatter_fig' not in st.session_state: st.session_state.rfm_scatter_fig = None
-if 'show_rfm_scatter' not in st.session_state: st.session_state.show_rfm_scatter = False
-if 'rfm_3d_scatter_fig' not in st.session_state: st.session_state.rfm_3d_scatter_fig = None
-if 'show_rfm_3d_scatter' not in st.session_state: st.session_state.show_rfm_3d_scatter = False
-if 'rfm_3d_interactive_fig' not in st.session_state: st.session_state.rfm_3d_interactive_fig = None
-if 'show_rfm_3d_interactive' not in st.session_state: st.session_state.show_rfm_3d_interactive = False
-
-# --- Add these sections within the main `if st.session_state.data is not None:` block ---
-
-# =========================================
-# Section: Products Analysis
-# =========================================
-st.markdown("---")
-st.header("Products Analysis")
-with st.expander("Show Products Analysis", expanded=False):
-    st.markdown("""
-    ### Products
-    | Attribute | Description |
-    |---|---|
-    | MntWines | Amount spent on wine in last 2 years |
-    | MntFruits | Amount spent on fruits in last 2 years |
-    | MntMeatProducts | Amount spent on meat in last 2 years |
-    | MntFishProducts | Amount spent on fish in last 2 years |
-    | MntSweetProducts | Amount spent on sweets in last 2 years |
-    | MntGoldProds | Amount spent on gold in last 2 years |
-    """)
-
-    # --- Action Buttons for Products ---
-    col_p1, col_p2, col_p3, col_p4 = st.columns(4)
-    with col_p1:
-        if st.button("Product Spending Histogram", key="show_prod_hist_btn"):
-            data_to_plot = st.session_state.data.iloc[:,9:15]
-            st.session_state.product_hist_fig = plot_histogram(data_to_plot) # Assumes returns fig
-            st.session_state.show_product_hist = True
-    with col_p2:
-         if st.button("Product Shares Pie Chart", key="show_prod_pie_btn"):
-            st.session_state.product_pie_fig = plot_pie_chart(st.session_state.data.iloc[:,9:15],title='Shares of Different Product Categories',variable_name='Total Value of Products',variable_name_X=-1.4,variable_name_Y=1) # Assumes returns fig
-            st.session_state.show_product_pie = True
-    with col_p3:
-        if st.button("Product Stacked Histogram", key="show_prod_stack_btn"):
-            data_copy_prod = st.session_state.data.copy() # Use a local copy
-            st.session_state.product_stacked_hist_fig = plot_stacked_histogram(data_copy_prod) # Assumes returns fig
-            st.session_state.show_product_stacked_hist = True
-    with col_p4:
-        if st.button("Log-Transformed Product Hist", key="show_prod_log_btn"):
-             data_log_prod = st.session_state.data.copy()
-             for col in ['MntWines', 'MntFruits', 'MntMeatProducts', 'MntFishProducts', 'MntSweetProducts', 'MntGoldProds']:
-                 data_log_prod[f'log_transformed_{col}'] = np.log1p(data_log_prod[col])
-             st.session_state.product_log_hist_fig = plot_histogram(data_log_prod.iloc[:,29:35]) # Assumes returns fig
-             st.session_state.show_product_log_hist = True
-
-    # --- Persistent Display Area for Products ---
-    if st.session_state.get('show_product_hist', False):
-        st.subheader("Product Spending Distribution")
-        if st.session_state.product_hist_fig:
-            st.pyplot(st.session_state.product_hist_fig) # Use st.pyplot for matplotlib
-            if st.button("Hide Product Histogram", key="hide_prod_hist_btn"):
-                st.session_state.show_product_hist = False
-                st.rerun()
-        else: st.warning("Generate histogram first.")
-
-    if st.session_state.get('show_product_pie', False):
-        st.subheader("Product Shares Pie Chart")
-        if st.session_state.product_pie_fig:
-            st.plotly_chart(st.session_state.product_pie_fig) # Use st.plotly_chart for Plotly
-            if st.button("Hide Product Pie Chart", key="hide_prod_pie_btn"):
-                st.session_state.show_product_pie = False
-                st.rerun()
-        else: st.warning("Generate pie chart first.")
-
-    if st.session_state.get('show_product_stacked_hist', False):
-        st.subheader("Product Stacked Histogram")
-        if st.session_state.product_stacked_hist_fig:
-            st.pyplot(st.session_state.product_stacked_hist_fig)
-            if st.button("Hide Product Stacked Hist", key="hide_prod_stack_btn"):
-                st.session_state.show_product_stacked_hist = False
-                st.rerun()
-        else: st.warning("Generate stacked histogram first.")
-
-    if st.session_state.get('show_product_log_hist', False):
-        st.subheader("Log-Transformed Product Spending Distribution")
-        if st.session_state.product_log_hist_fig:
-            st.pyplot(st.session_state.product_log_hist_fig)
-            if st.button("Hide Log Product Hist", key="hide_prod_log_btn"):
-                st.session_state.show_product_log_hist = False
-                st.rerun()
-        else: st.warning("Generate log histogram first.")
-
-# =========================================
-# Section: People Analysis
-# =========================================
-st.markdown("---")
-st.header("People Analysis")
-with st.expander("Show People Analysis", expanded=False):
-    st.markdown("""
-    ### People
-    | Attribute | Description |
-    |---|---|
-    | ID | Customer's unique identifier |
-    | Year_Birth | Customer's birth year |
-    | Education | Customer's education level |
-    | Marital_Status | Customer's marital status |
-    | Income | Customer's yearly household income |
-    | Kidhome | Number of children in customer's household |
-    | Teenhome | Number of teenagers in customer's household |
-    | Dt_Customer | Date of customer's enrollment with the company |
-    """)
-
-    # --- Action Buttons for People ---
-    col_pe1, col_pe2, col_pe3 = st.columns(3)
-    with col_pe1:
-        if st.button("Birth Year/Income Histogram", key="show_people_hist_btn"):
-            data_to_plot = st.session_state.data[['Year_Birth', 'Income']].dropna() # Handle potential NA in Income for plot
-            st.session_state.people_hist_fig = plot_histogram(data_to_plot)
-            st.session_state.show_people_hist = True
-    with col_pe2:
-        if st.button("Log-Transformed Income Hist", key="show_people_income_log_btn"):
-            data_log_income = st.session_state.data[['Income']].dropna().copy() # Handle NA
-            data_log_income['log_transformed_income'] = np.log1p(data_log_income['Income'])
-            st.session_state.people_income_log_hist_fig = plot_histogram(data_log_income[['log_transformed_income']])
-            st.session_state.show_people_income_log_hist = True
-    with col_pe3:
-        if st.button("Show Data Sorted by Birth Year", key="show_people_sorted_btn"):
-            data_sorted = st.session_state.data.sort_values(by='Year_Birth')
-            st.session_state.people_sorted_df = data_sorted
-            st.session_state.show_people_sorted = True
-
-    # --- Persistent Display Area for People ---
-    if st.session_state.get('show_people_hist', False):
-        st.subheader("Birth Year and Income Distribution")
-        if st.session_state.people_hist_fig:
-            st.pyplot(st.session_state.people_hist_fig)
-            if st.button("Hide Birth/Income Hist", key="hide_people_hist_btn"):
-                st.session_state.show_people_hist = False
-                st.rerun()
-        else: st.warning("Generate histogram first.")
-
-    if st.session_state.get('show_people_income_log_hist', False):
-        st.subheader("Log-Transformed Income Distribution")
-        if st.session_state.people_income_log_hist_fig:
-            st.pyplot(st.session_state.people_income_log_hist_fig)
-            if st.button("Hide Log Income Hist", key="hide_people_income_log_btn"):
-                st.session_state.show_people_income_log_hist = False
-                st.rerun()
-        else: st.warning("Generate log income histogram first.")
-
-    if st.session_state.get('show_people_sorted', False):
-        st.subheader("Data Sorted by Birth Year")
-        if st.session_state.people_sorted_df is not None:
-            st.dataframe(st.session_state.people_sorted_df)
-            if st.button("Hide Sorted Data", key="hide_people_sorted_btn"):
-                st.session_state.show_people_sorted = False
-                st.rerun()
-        else: st.warning("Generate sorted data first.")
-
-# =========================================
-# Section: Age Analysis
-# =========================================
-st.markdown("---")
-st.header("Age and Enrollment Analysis")
-with st.expander("Show Age/Enrollment Analysis", expanded=False):
-    st.markdown("""
-    ### How old was the customer on the day of customer's enrollment (enrollment day) with the company?
-    ### Is there a relationship between age on enrollment day and their actual age?
-    We will use a substitute which is the age of all the customers on the last enrollment day in the data set to keep things within the context of the dataset.
-    """)
-
-    # --- Action Buttons for Age ---
-    col_a1, col_a2, col_a3 = st.columns(3)
-    with col_a1:
-        if st.button("Show Enrollment Date & Birth Year", key="show_age_dt_birth_btn"):
-            st.session_state.age_dt_birth_df = st.session_state.data[['Dt_Customer','Year_Birth']]
-            st.session_state.show_age_dt_birth = True
-    with col_a2:
-        if st.button("Show Age Histograms", key="show_age_hist_btn"):
-             data_copy_age = st.session_state.data.copy()
-             data_copy_age['Dt_Customer'] = pd.to_datetime(data_copy_age['Dt_Customer'], errors='coerce') # Ensure datetime
-             data_copy_age.dropna(subset=['Dt_Customer', 'Year_Birth'], inplace=True) # Drop rows where calculation isn't possible
-             data_copy_age['Age_On_Enrollment_Day'] = data_copy_age['Dt_Customer'].dt.year - data_copy_age['Year_Birth']
-             latest_enrollment_date = data_copy_age['Dt_Customer'].max()
-             data_copy_age['Age_On_Last_Enrollment_Date'] = latest_enrollment_date.year - data_copy_age['Year_Birth']
-             st.session_state.age_hist_fig = plot_histogram(data_copy_age[['Age_On_Enrollment_Day','Age_On_Last_Enrollment_Date']])
-             st.session_state.show_age_hist = True
-    with col_a3:
-         if st.button("Show Enrollment Year Histogram", key="show_enroll_year_btn"):
-             data_copy_enroll = st.session_state.data.copy()
-             data_copy_enroll['Dt_Customer'] = pd.to_datetime(data_copy_enroll['Dt_Customer'], errors='coerce') # Ensure datetime
-             data_copy_enroll.dropna(subset=['Dt_Customer'], inplace=True)
-             data_copy_enroll['Year_Of_Enrollment'] = data_copy_enroll['Dt_Customer'].dt.year
-             st.session_state.enroll_year_hist_fig = plot_histogram(data_copy_enroll[['Year_Of_Enrollment']])
-             st.session_state.show_enroll_year_hist = True
-
-    st.markdown("""
-    *Roughly, the same number of people are in the histogram bins. There seems to be a strong similarity between Age Enrollment and Age Current.*
-    """)
-    st.markdown("""
-    *Now we understand why the Histograms of `Age_On_Enrollment_Day` and `Age_On_Last_Enrollment_Date` are so similar. **All of them were registered in just three years, 2012 to 2014.** *
-    """)
-
-
-    # --- Persistent Display Area for Age ---
-    if st.session_state.get('show_age_dt_birth', False):
-        st.subheader("Enrollment Date & Birth Year")
-        if st.session_state.age_dt_birth_df is not None:
-            st.dataframe(st.session_state.age_dt_birth_df)
-            if st.button("Hide Date/Birth Data", key="hide_age_dt_birth_btn"):
-                st.session_state.show_age_dt_birth = False
-                st.rerun()
-        else: st.warning("Generate Date/Birth data first.")
-
-    if st.session_state.get('show_age_hist', False):
-        st.subheader("Age on Enrollment vs. Age on Last Enrollment Date")
-        if st.session_state.age_hist_fig:
-            st.pyplot(st.session_state.age_hist_fig)
-            if st.button("Hide Age Histograms", key="hide_age_hist_btn"):
-                st.session_state.show_age_hist = False
-                st.rerun()
-        else: st.warning("Generate age histograms first.")
-
-    if st.session_state.get('show_enroll_year_hist', False):
-        st.subheader("Year of Enrollment Distribution")
-        if st.session_state.enroll_year_hist_fig:
-            st.pyplot(st.session_state.enroll_year_hist_fig)
-            if st.button("Hide Enrollment Year Hist", key="hide_enroll_year_btn"):
-                st.session_state.show_enroll_year_hist = False
-                st.rerun()
-        else: st.warning("Generate enrollment year histogram first.")
-
-# =========================================
-# Section: Circumstances Analysis
-# =========================================
-st.markdown("---")
-st.header("People's Circumstances Analysis")
-with st.expander("Show Circumstances Analysis", expanded=False):
-    st.markdown("### People's Circumstances or People's Situation")
-
-    # --- Action Button ---
-    if st.button("Show Circumstances Bar Chart", key="show_circ_bar_btn"):
-        cols_to_plot = ['Education', 'Marital_Status', 'Kidhome', 'Teenhome', 'Complain','NumWebVisitsMonth']
-        # Ensure columns exist and handle potential errors if plot_bar_chart needs specific types
-        valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
-        if valid_cols:
-             st.session_state.circumstances_bar_fig = plot_bar_chart(st.session_state.data[valid_cols],rotation=15)
-             st.session_state.show_circumstances_bar = True
-        else:
-             st.warning(f"Not all required columns found in data: {cols_to_plot}")
-
-
-    # --- Persistent Display ---
-    if st.session_state.get('show_circumstances_bar', False):
-        st.subheader("Distribution of Circumstances")
-        if st.session_state.circumstances_bar_fig:
-            st.pyplot(st.session_state.circumstances_bar_fig) # Or st.plotly_chart if it returns Plotly
-            if st.button("Hide Circumstances Chart", key="hide_circ_bar_btn"):
-                st.session_state.show_circumstances_bar = False
-                st.rerun()
-        else: st.warning("Generate circumstances chart first.")
-
-# =========================================
-# Section: Promotion Analysis
-# =========================================
-st.markdown("---")
-st.header("Promotion Acceptance Analysis")
-with st.expander("Show Promotion Analysis", expanded=False):
-    st.markdown("""
-    ### Promotion
-    | Attribute | Description |
-    |---|---|
-    | NumDealsPurchases | Number of purchases made with a discount |
-    | AcceptedCmp1 | 1 if customer accepted the offer in the 1st campaign, 0 otherwise |
-    | AcceptedCmp2 | 1 if customer accepted the offer in the 2nd campaign, 0 otherwise |
-    | AcceptedCmp3 | 1 if customer accepted the offer in the 3rd campaign, 0 otherwise |
-    | AcceptedCmp4 | 1 if customer accepted the offer in the 4th campaign, 0 otherwise |
-    | AcceptedCmp5 | 1 if customer accepted the offer in the 5th campaign, 0 otherwise |
-    | Response | 1 if customer accepted the offer in the last campaign, 0 otherwise |
-    """)
-
-    # --- Action Button ---
-    if st.button("Show Promotion Bar Chart", key="show_promo_bar_btn"):
-        cols_to_plot = ['NumDealsPurchases','AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response']
-        valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
-        if valid_cols:
-            st.session_state.promotion_bar_fig = plot_bar_chart(st.session_state.data[valid_cols],rotation=0)
-            st.session_state.show_promotion_bar = True
-        else:
-             st.warning(f"Not all required columns found in data: {cols_to_plot}")
-
-    # --- Persistent Display ---
-    if st.session_state.get('show_promotion_bar', False):
-        st.subheader("Distribution of Promotion Variables")
-        if st.session_state.promotion_bar_fig:
-            st.pyplot(st.session_state.promotion_bar_fig) # Or st.plotly_chart
-            if st.button("Hide Promotion Chart", key="hide_promo_bar_btn"):
-                st.session_state.show_promotion_bar = False
-                st.rerun()
-        else: st.warning("Generate promotion chart first.")
-
-# =========================================
-# Section: Place Analysis
-# =========================================
-st.markdown("---")
-st.header("Place of Purchase Analysis")
-with st.expander("Show Place Analysis", expanded=False):
-    st.markdown("""
-    ### Place
-    | Attribute | Description |
-    |---|---|
-    | NumWebPurchases | Number of purchases made through the company’s website |
-    | NumCatalogPurchases | Number of purchases made using a catalog |
-    | NumStorePurchases | Number of purchases made directly in stores |
-    | NumDealsPurchases | Number of purchases made with a discount |
-    """)
-
-    # --- Action Buttons ---
-    col_pl1, col_pl2 = st.columns(2)
-    with col_pl1:
-        if st.button("Show Place Bar Chart", key="show_place_bar_btn"):
-            cols_to_plot = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
-            valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
-            if valid_cols:
-                 st.session_state.place_bar_fig = plot_bar_chart(st.session_state.data[valid_cols],rotation=0)
-                 st.session_state.show_place_bar = True
-            else:
-                 st.warning(f"Not all required columns found in data: {cols_to_plot}")
-    with col_pl2:
-         if st.button("Show Place Pie Chart", key="show_place_pie_btn"):
-            cols_to_plot = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
-            valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
-            if valid_cols:
-                 st.session_state.place_pie_fig = plot_pie_chart(st.session_state.data[valid_cols],title='Shares of different Platforms used for purchase',variable_name='Total Number of Pruchases',variable_name_X=-1.4,variable_name_Y=1)
-                 st.session_state.show_place_pie = True
-            else:
-                 st.warning(f"Not all required columns found in data: {cols_to_plot}")
-
-    st.markdown("""
-    **Catalog Purchase**
-    - **Definition**: Buying from a catalog or other printed list. Catalog received as a physical copy or a digital copy.
-    - **Customers**: Individuals, businesses.
-    - **Items**: Specific by individuals, bulk orders by businesses.
-    - **Ordering**: Online, in-store, mail.
-    - **Frequency**: Regular purchases.
-    - **Promotion**: Advertise products.
-
-    [Source](https://oboloo.com/glossary/catalog-purchase/#:~:text=The%20official%20business%20definition%20of,and%20have%20shipped%20to%20them.)
-
-    #### Most valuable place of purchase
-    (See Pie Chart)
-    """)
-
-    # --- Persistent Display ---
-    if st.session_state.get('show_place_bar', False):
-        st.subheader("Distribution of Purchases by Place")
-        if st.session_state.place_bar_fig:
-            st.pyplot(st.session_state.place_bar_fig) # Or st.plotly_chart
-            if st.button("Hide Place Bar Chart", key="hide_place_bar_btn"):
-                st.session_state.show_place_bar = False
-                st.rerun()
-        else: st.warning("Generate place bar chart first.")
-
-    if st.session_state.get('show_place_pie', False):
-        st.subheader("Shares of Purchases by Place")
-        if st.session_state.place_pie_fig:
-            st.plotly_chart(st.session_state.place_pie_fig) # Or st.pyplot
-            if st.button("Hide Place Pie Chart", key="hide_place_pie_btn"):
-                st.session_state.show_place_pie = False
-                st.rerun()
-        else: st.warning("Generate place pie chart first.")
-
-
-# ==================================================
-# Section: Feature Engineering & People's Actions
-# ==================================================
-st.markdown("---")
-st.header("Feature Engineering & People's Actions Analysis")
-with st.expander("Show Actions Analysis", expanded=False):
-    st.markdown("""
-    ### People's Actions
-    | Attribute | Description |
-    |---|---|
-    | Recency | Number of days since customer's last purchase |
-    | Complain | 1 if the customer complained in the last 2 years, 0 otherwise |
-    | NumWebVisitsMonth | Number of visits to company’s website in the last month |
-
-    Ideas to explore:
-
-    RFM analysis combined with Complaints, Ratio of Average Number of Web purchases and Number of visits in the last month, Higher ratio would indicate higher satisfaction, lower ratio might indicate lower satisfaction when combined with income
-
-    Relationship between people's circumstances and their tendency to accept campaigns.
-    """)
-
-    # --- Button to Perform Feature Engineering ---
-    if st.button("Perform Feature Engineering", key="do_feature_eng"):
-         if st.session_state.data is not None:
-             try:
-                 data_copy = st.session_state.data.copy() # Start fresh
-
-                 # Ensure correct dtypes before calculations
-                 data_copy['Dt_Customer'] = pd.to_datetime(data_copy['Dt_Customer'], errors='coerce')
-                 data_copy['Income'] = pd.to_numeric(data_copy['Income'], errors='coerce').fillna(0) # Fill NA income with 0 for ratio calculation safety
-                 numeric_cols = ['MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds',
-                                 'NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases',
-                                 'AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response',
-                                 'Customer_Tenure_months', 'NumWebVisitsMonth', 'Recency']
-                 for col in numeric_cols:
-                     if col in data_copy.columns:
-                         data_copy[col] = pd.to_numeric(data_copy[col], errors='coerce').fillna(0)
-
-                 data_copy.dropna(subset=['Dt_Customer'], inplace=True) # Need Dt_Customer for tenure
-
-                 # Calculate Tenure
-                 latest_date = data_copy['Dt_Customer'].max() + pd.DateOffset(days=1)
-                 data_copy['Customer_Tenure_months'] = ((latest_date - data_copy['Dt_Customer']).dt.days / 30.0).astype(float) # Use 30.0 for float division
-
-                 # Calculate Monetary
-                 Products_columns = ['MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds']
-                 data_copy['Monetary'] = data_copy[Products_columns].sum(axis=1)
-
-                 # Calculate Avg_Purchase_Per_Month - handle potential division by zero
-                 data_copy['Avg_Purchase_Per_Month'] = np.where(
-                     data_copy['Customer_Tenure_months'] > 0,
-                     round(data_copy['Monetary'] / data_copy['Customer_Tenure_months'], 3),
-                     0 # Set to 0 if tenure is 0 or less
-                 )
-
-                 # Calculate NumAcceptedCmps
-                 campaign_cols = ['AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response']
-                 data_copy['NumAcceptedCmps'] = data_copy[campaign_cols].sum(axis=1)
-
-                 # Calculate Avg_Purchase_Per_Month_To_Monthly_Income_Ratio
-                 # Income already handled (fillna(0))
-                 # Check for tenure > 0 and income > 0
-                 data_copy['Avg_Purchase_Per_Month_To_Monthly_Income_Ratio'] = np.where(
-                     (data_copy['Customer_Tenure_months'] > 0) & (data_copy['Income'] > 0),
-                     round(data_copy['Avg_Purchase_Per_Month'] / (data_copy['Income'] / 12.0), 3), # Monthly income estimate
-                     0 # Set to 0 if tenure or income is zero or less
-                 )
-
-                 # Calculate Ratio_of_Deals_Purchases_to_Total_Purchases
-                 purchase_cols = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
-                 total_purchases = data_copy[purchase_cols].sum(axis=1)
-                 data_copy['Ratio_of_Deals_Purchases_to_Total_Purchases'] = np.where(
-                     total_purchases > 0,
-                     round(data_copy['NumDealsPurchases'] / total_purchases, 3),
-                     0 # Set to 0 if total purchases are 0
-                 )
-
-                 st.session_state.data_copy_engineered = data_copy
-                 st.session_state.feature_engineering_done = True
-                 # Clear RFM state if features are re-engineered
-                 st.session_state.rfm_calculated = False
-                 st.success("Feature engineering complete. You can now view related analyses.")
-             except Exception as e:
-                 st.error(f"Error during feature engineering: {e}")
-                 st.session_state.feature_engineering_done = False
-         else:
-             st.warning("Load data first.")
-
-    # --- Action Buttons dependent on Feature Engineering ---
-    if st.session_state.get('feature_engineering_done', False):
-        st.markdown("---")
-        st.write("**Analyses based on Engineered Features:**")
-        col_fa1, col_fa2, col_fa3, col_fa4 = st.columns(4)
-        engineered_df = st.session_state.data_copy_engineered # Use the stored engineered df
-
-        with col_fa1:
-            if st.button("Show Engineered Data Sample", key="show_actions_eng_btn"):
-                cols_to_show = ['NumWebPurchases','NumCatalogPurchases','NumDealsPurchases','NumStorePurchases','NumWebVisitsMonth','Recency','NumAcceptedCmps','Ratio_of_Deals_Purchases_to_Total_Purchases','Avg_Purchase_Per_Month','Avg_Purchase_Per_Month_To_Monthly_Income_Ratio']
-                st.session_state.actions_eng_df = engineered_df[cols_to_show].head() # Show head
-                st.session_state.show_actions_eng = True
-        with col_fa2:
-            if st.button("Show Tenure >= 6m Histograms", key="show_actions_tenure_btn"):
-                 cols_to_plot = ['Avg_Purchase_Per_Month','Avg_Purchase_Per_Month_To_Monthly_Income_Ratio','NumAcceptedCmps','Ratio_of_Deals_Purchases_to_Total_Purchases']
-                 df_filtered = engineered_df[engineered_df['Customer_Tenure_months']>=6]
-                 st.session_state.actions_tenure_hist_fig = plot_histogram(df_filtered[cols_to_plot],title='Analysis of Customer Tenures of at least 6 months')
-                 st.session_state.show_actions_tenure_hist = True
-        with col_fa3:
-            if st.button("Show Recent Customers with 0 Visits", key="show_actions_novisit_btn"):
-                cols_to_show = ['NumWebPurchases','NumCatalogPurchases','NumDealsPurchases','NumStorePurchases','NumWebVisitsMonth','Recency','Monetary','NumAcceptedCmps','Avg_Purchase_Per_Month','Avg_Purchase_Per_Month_To_Monthly_Income_Ratio']
-                df_filtered = engineered_df[((engineered_df['Recency'] > 0) & (engineered_df['NumWebVisitsMonth'] == 0))]
-                st.session_state.actions_no_visits_df = df_filtered[cols_to_show]
-                st.session_state.show_actions_no_visits = True
-        with col_fa4:
-            # Placeholder for other action buttons if needed
-            pass
-
-        col_fa5, col_fa6 = st.columns(2)
-        with col_fa5:
-            if st.button("Show Recency Histogram", key="show_actions_recency_btn"):
-                 # Use original data or engineered data? User code used original 'data'
-                 st.session_state.actions_recency_hist_fig = plot_histogram(st.session_state.data[['Recency']])
-                 st.session_state.show_actions_recency_hist = True
-        with col_fa6:
-            if st.button("Show Complain/Visits Bar Chart", key="show_actions_cv_bar_btn"):
-                # Use original data or engineered data? User code used original 'data'
-                st.session_state.actions_complain_visits_bar_fig = plot_bar_chart(st.session_state.data[['Complain','NumWebVisitsMonth']],rotation=0)
-                st.session_state.show_actions_complain_visits_bar = True
-
-    else:
-        st.info("Perform Feature Engineering first to enable subsequent analyses.")
-
-
-    # --- Persistent Display Area for Actions ---
-    if st.session_state.get('show_actions_eng', False):
-        st.subheader("Sample of Engineered Features")
-        if st.session_state.actions_eng_df is not None:
-            st.dataframe(st.session_state.actions_eng_df)
-            if st.button("Hide Engineered Sample", key="hide_actions_eng_btn"):
-                st.session_state.show_actions_eng = False
-                st.rerun()
-        else: st.warning("Generate engineered sample first.")
-
-    if st.session_state.get('show_actions_tenure_hist', False):
-        st.subheader("Analysis for Tenure >= 6 months")
-        if st.session_state.actions_tenure_hist_fig:
-            st.pyplot(st.session_state.actions_tenure_hist_fig)
-            if st.button("Hide Tenure Histograms", key="hide_actions_tenure_btn"):
-                st.session_state.show_actions_tenure_hist = False
-                st.rerun()
-        else: st.warning("Generate tenure histograms first.")
-
-    if st.session_state.get('show_actions_no_visits', False):
-        st.subheader("Recent Customers with 0 Web Visits")
-        if st.session_state.actions_no_visits_df is not None:
-            st.dataframe(st.session_state.actions_no_visits_df)
-            if st.button("Hide No-Visits Data", key="hide_actions_novisit_btn"):
-                st.session_state.show_actions_no_visits = False
-                st.rerun()
-        else: st.warning("Generate no-visits data first.")
-
-    if st.session_state.get('show_actions_recency_hist', False):
-        st.subheader("Recency Distribution")
-        if st.session_state.actions_recency_hist_fig:
-            st.pyplot(st.session_state.actions_recency_hist_fig)
-            if st.button("Hide Recency Hist", key="hide_actions_recency_btn"):
-                st.session_state.show_actions_recency_hist = False
-                st.rerun()
-        else: st.warning("Generate recency histogram first.")
-
-    if st.session_state.get('show_actions_complain_visits_bar', False):
-        st.subheader("Complaints and Web Visits Distribution")
-        if st.session_state.actions_complain_visits_bar_fig:
-            st.pyplot(st.session_state.actions_complain_visits_bar_fig) # Or plotly
-            if st.button("Hide Complain/Visits Chart", key="hide_actions_cv_bar_btn"):
-                st.session_state.show_actions_complain_visits_bar = False
-                st.rerun()
-        else: st.warning("Generate complain/visits chart first.")
-
-
-# =========================================
-# Section: Cost and Revenue
-# =========================================
-st.markdown("---")
-st.header("Cost and Revenue Analysis")
-with st.expander("Show Cost/Revenue Analysis", expanded=False):
-    st.markdown("""
-    ### Cost and Revenue
-    | Attribute | Description |
-    |---|---|
-    | Z_CostContact | Cost |
-    | Z_Revenue | Revenue |
-    """)
-
-    # --- Action Button ---
-    if st.button("Show Cost/Revenue Histogram", key="show_costrev_hist_btn"):
-        cols_to_plot = ['Z_CostContact', 'Z_Revenue']
-        valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
-        if valid_cols:
-             st.session_state.cost_rev_hist_fig = plot_histogram(st.session_state.data[valid_cols])
-             st.session_state.show_cost_rev_hist = True
-        else:
-            st.warning(f"Cost/Revenue columns not found: {cols_to_plot}")
-
-    st.markdown("""
-    *The 'Z_CostContact', 'Z_Revenue' variables seem to be average values over all the customers and therefore, <span style="color: red;">of little use</span>.*
-    """, unsafe_allow_html=True) # Allow HTML for color
-
-    # --- Persistent Display ---
-    if st.session_state.get('show_cost_rev_hist', False):
-        st.subheader("Cost and Revenue Distribution")
-        if st.session_state.cost_rev_hist_fig:
-            st.pyplot(st.session_state.cost_rev_hist_fig)
-            if st.button("Hide Cost/Revenue Hist", key="hide_costrev_hist_btn"):
-                st.session_state.show_cost_rev_hist = False
-                st.rerun()
-        else: st.warning("Generate cost/revenue histogram first.")
-
-
-# =========================================
-# Section: RFM Analysis
-# =========================================
-st.markdown("---")
-st.header("RFM (Recency, Frequency, Monetary) Analysis")
-with st.expander("Show RFM Analysis", expanded=False):
-    st.markdown("""
-    *(Requires Feature Engineering step to be completed first)*
-    ### Products (Reference for Monetary Calculation)
-    | Attribute | Description |
-    |---|---|
-    | MntWines | Amount spent on wine in last 2 years |
-    | MntFruits | Amount spent on fruits in last 2 years |
-    | MntMeatProducts | Amount spent on meat in last 2 years |
-    | MntFishProducts | Amount spent on fish in last 2 years |
-    | MntSweetProducts | Amount spent on sweets in last 2 years |
-    | MntGoldProds | Amount spent on gold in last 2 years |
-    """)
-
-    # --- Button to Perform RFM Calculation ---
-    # Requires engineered data first
-    if st.session_state.get('feature_engineering_done', False):
-        if st.button("Calculate RFM Scores and Segments", key="calc_rfm_btn"):
-            try:
-                # Use the already engineered DataFrame
-                rfm_data = st.session_state.data_copy_engineered.copy()
-
-                # Ensure necessary columns exist from engineering step
-                required_rfm_cols = ['ID', 'Recency', 'Monetary']
-                if not all(col in rfm_data.columns for col in required_rfm_cols):
-                     st.error("Required columns (ID, Recency, Monetary) not found in engineered data. Rerun Feature Engineering.")
-                else:
-                    # Calculate Frequency (if not already done, though it should be in Monetary section)
-                    Place_columns = ['NumDealsPurchases', 'NumWebPurchases','NumCatalogPurchases', 'NumStorePurchases']
-                    rfm_data['Frequency'] = rfm_data[Place_columns].sum(axis=1)
-
-                    # Store the raw RFM values DataFrame view
-                    st.session_state.rfm_df = rfm_data[['ID','Recency','Frequency','Monetary']]
-
-                    # --- Assumes rank_group and segment_customer functions are defined ---
-                    rfm_data['Recency_Rank'] = rank_group(rfm_data['Recency'])
-                    rfm_data['Frequency_Rank'] = rank_group(rfm_data['Frequency'])
-                    rfm_data['Monetary_Rank'] = rank_group(rfm_data['Monetary'])
-                    rfm_data['Average_Rank'] = (rfm_data['Recency_Rank'].astype(int) + rfm_data['Frequency_Rank'].astype(int) + rfm_data['Monetary_Rank'].astype(int)) / 3
-                    rfm_data['Segment'] = rfm_data.apply(segment_customer, axis=1)
-                    # --- End of assumed functions ---
-
-                    # Store the ranked/segmented DataFrame view
-                    selected_columns = ['ID', 'Recency', 'Frequency', 'Monetary', 'Recency_Rank', 'Frequency_Rank', 'Monetary_Rank', 'Segment']
-                    st.session_state.rfm_ranks_df = rfm_data[selected_columns]
-
-                    # Generate plots and store figures
-                    st.session_state.rfm_scatter_fig = plot_customer_segmentation_scatter_plot(data=rfm_data,x='Recency',y='Frequency',hue='Segment',palette='Set1',s=100)
-                    st.session_state.rfm_3d_scatter_fig = plot_customer_segmentation_3d_scatter_plot(data=rfm_data,x='Recency',y='Frequency',z='Monetary',hue='Segment',palette='Set1',s=100)
-                    # Assuming the interactive plot function returns a Plotly figure
-                    st.session_state.rfm_3d_interactive_fig = plot_customer_segmentation_3d_interactive_scatter_plot(rfm_data[['Recency', 'Frequency', 'Monetary', 'Segment']])
-
-                    st.session_state.rfm_calculated = True
-                    st.success("RFM analysis complete. You can now view RFM results.")
-
-            except NameError as ne:
-                 st.error(f"RFM Calculation Error: Function not defined? {ne}. Make sure 'rank_group' and 'segment_customer' are defined.")
-            except Exception as e:
-                 st.error(f"An error occurred during RFM calculation: {e}")
-                 st.session_state.rfm_calculated = False
-    else:
-        st.info("Perform Feature Engineering first to enable RFM Analysis.")
-
-
-    # --- Action Buttons to Show RFM Results ---
-    if st.session_state.get('rfm_calculated', False):
-        st.markdown("---")
-        st.write("**RFM Results:**")
-        col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
-        with col_r1:
-            if st.button("Show RFM Values", key="show_rfm_val_btn"): st.session_state.show_rfm_df = True
-        with col_r2:
-            if st.button("Show RFM Ranks/Segments", key="show_rfm_rank_btn"): st.session_state.show_rfm_ranks = True
-        with col_r3:
-            if st.button("Show RFM Scatter Plot", key="show_rfm_scatter_btn"): st.session_state.show_rfm_scatter = True
-        with col_r4:
-            if st.button("Show RFM 3D Scatter", key="show_rfm_3d_btn"): st.session_state.show_rfm_3d_scatter = True
-        with col_r5:
-            if st.button("Show RFM Interactive 3D", key="show_rfm_int_btn"): st.session_state.show_rfm_3d_interactive = True
-    else:
-         st.info("Calculate RFM Scores first to view results.")
-
-
-    # --- Persistent Display Area for RFM ---
-    if st.session_state.get('show_rfm_df', False):
-        st.subheader("RFM Values")
-        if st.session_state.rfm_df is not None:
-            st.dataframe(st.session_state.rfm_df.head()) # Show head
-            if st.button("Hide RFM Values", key="hide_rfm_val_btn"):
-                st.session_state.show_rfm_df = False
-                st.rerun()
-        else: st.warning("Calculate RFM first.")
-
-    if st.session_state.get('show_rfm_ranks', False):
-        st.subheader("RFM Ranks and Segments")
-        if st.session_state.rfm_ranks_df is not None:
-            st.dataframe(st.session_state.rfm_ranks_df.head()) # Show head
-            if st.button("Hide RFM Ranks", key="hide_rfm_rank_btn"):
-                st.session_state.show_rfm_ranks = False
-                st.rerun()
-        else: st.warning("Calculate RFM first.")
-
-    if st.session_state.get('show_rfm_scatter', False):
-        st.subheader("RFM Scatter Plot (Recency vs Frequency)")
-        if st.session_state.rfm_scatter_fig:
-            st.pyplot(st.session_state.rfm_scatter_fig) # Assuming matplotlib
-            if st.button("Hide RFM Scatter", key="hide_rfm_scatter_btn"):
-                st.session_state.show_rfm_scatter = False
-                st.rerun()
-        else: st.warning("Calculate RFM first.")
-
-    if st.session_state.get('show_rfm_3d_scatter', False):
-        st.subheader("RFM 3D Scatter Plot")
-        if st.session_state.rfm_3d_scatter_fig:
-            # 3D plots with matplotlib might not render well directly in st.pyplot.
-            # Consider saving as image or using Plotly if possible.
-            # For now, assuming st.pyplot might work for basic 3D.
-            st.pyplot(st.session_state.rfm_3d_scatter_fig)
-            if st.button("Hide RFM 3D Scatter", key="hide_rfm_3d_btn"):
-                st.session_state.show_rfm_3d_scatter = False
-                st.rerun()
-        else: st.warning("Calculate RFM first.")
-
-    if st.session_state.get('show_rfm_3d_interactive', False):
-        st.subheader("RFM Interactive 3D Scatter Plot")
-        if st.session_state.rfm_3d_interactive_fig:
-            st.plotly_chart(st.session_state.rfm_3d_interactive_fig) # Assuming Plotly
-            if st.button("Hide RFM Interactive 3D", key="hide_rfm_int_btn"):
-                st.session_state.show_rfm_3d_interactive = False
-                st.rerun()
-        else: st.warning("Calculate RFM first.")
-
-
-# --- End of the main `if st.session_state.data is not None:` block ---
