@@ -227,44 +227,59 @@ def plot_bar_chart(data, columns_to_include=None, rotation=0):
     # plt.show()
     return fig
 
+import matplotlib.pyplot as plt
+import pandas as pd # Assuming data is a pandas Series or DataFrame
+
 # Define function for pie charts
 def plot_pie_chart(data,title,variable_name,variable_name_X,variable_name_Y):
     series_data = data.sum()
     total_value = data.sum().sum()
-    # labels =
 
-    # Create a pie chart
-    plt.figure(figsize=(8, 8))
-    plt.pie(series_data, labels=series_data.index, autopct='%1.1f%%', startangle=90, labeldistance = 1.03)
-    plt.title(title)
-    plt.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    # Create figure and axes objects explicitly
+    fig, ax = plt.subplots(figsize=(8, 8))
 
-    # Add text annotation in the top-left corner
-    plt.text(
+    # Plot on the axes object
+    ax.pie(series_data, labels=series_data.index, autopct='%1.1f%%', startangle=90, labeldistance = 1.03)
+    ax.set_title(title) # Use ax.set_title
+    ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+
+    # Add text annotation using the axes object
+    ax.text(
         variable_name_X,  # x-coordinate (adjust as needed for positioning)
         variable_name_Y,   # y-coordinate (adjust as needed for positioning)
         f"{variable_name}: {total_value:.2f}",  # Display total value, formatted to 2 decimal places
         fontsize=10,
         fontweight='bold',
-        bbox={'facecolor': 'lightgray', 'alpha': 0.5, 'pad': 5}  # Optional: Add a box around the text
+        bbox={'facecolor': 'lightgray', 'alpha': 0.5, 'pad': 5},  # Optional: Add a box around the text
+        transform=ax.transAxes # Use axes coordinates for text positioning relative to the axes
+                               # (0,0 is bottom-left, 1,1 is top-right) - adjust X/Y accordingly if needed
+                               # If you want data coordinates, remove transform=ax.transAxes
     )
 
-    # plt.show()
+    # Return the figure object
     return fig
     
 
 # Define function for scatter plots for pairs of variables
 def plot_scatterplot(data, column_for_color=None, columns_to_exclude=None, heading_of_plot=None):
+    """Generates a pairplot and returns the Figure object."""
     # If columns_to_exclude is provided, drop those columns
     if columns_to_exclude is not None:
-        data_to_plot = data.drop(columns=columns_to_exclude)
+        # Ensure columns exist before dropping
+        cols_exist = [col for col in columns_to_exclude if col in data.columns]
+        data_to_plot = data.drop(columns=cols_exist)
     else:
         data_to_plot = data  # Use the entire DataFrame if no columns are excluded
 
-    sns.pairplot(data_to_plot, diag_kind='kde', markers='o', hue=column_for_color, palette='viridis')
-    plt.suptitle(f'{heading_of_plot}', y=1.02)
-    # plt.show()
-    return fig
+    # Create the pairplot (figure-level function)
+    g = sns.pairplot(data_to_plot, diag_kind='kde', markers='o', hue=column_for_color, palette='viridis')
+
+    # Add the super title to the figure object managed by PairGrid
+    if heading_of_plot:
+        g.fig.suptitle(f'{heading_of_plot}', y=1.02)
+
+    # Return the figure object from the PairGrid
+    return g.fig
     
 
 def plot_customer_segmentation_3d_interactive_scatter_plot(data, x='Recency', y='Frequency', z='Monetary', hue='Segment', palette='Plotly'):
@@ -297,15 +312,19 @@ def plot_customer_segmentation_3d_interactive_scatter_plot(data, x='Recency', y=
     # fig.show()
     return fig
 
+
 def plot_customer_segmentation_3d_scatter_plot(data, x='Recency', y='Frequency', z='Monetary', hue='Segment', palette='Set1', s=100):
-    plt.figure(figsize=(10, 8))
-    ax = plt.figure().add_subplot(111, projection='3d')
+    """Generates a 3D scatter plot and returns the Figure object."""
+    # Create figure and 3D axes ONCE
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
 
     # Get unique segments and their corresponding colors
     segments = data[hue].unique()
     color_map = sns.color_palette(palette, n_colors=len(segments))
     color_dict = {segment: color for segment, color in zip(segments, color_map)}
 
+    # Plot data for each segment on the axes
     for segment in segments:
         segment_data = data[data[hue] == segment]
         ax.scatter(
@@ -317,13 +336,14 @@ def plot_customer_segmentation_3d_scatter_plot(data, x='Recency', y='Frequency',
             s=s
         )
 
+    # Set titles and labels using the axes object
     ax.set_title('Customer Segmentation 3D Scatter Plot')
     ax.set_xlabel(x)
     ax.set_ylabel(y)
     ax.set_zlabel(z)
     ax.legend(title='Segment', loc='upper right')
 
-    # plt.show()
+    # Return the figure object
     return fig
 
 # Function to rank values into 5 groups
@@ -379,8 +399,12 @@ def segment_customer_modified(row):
 
 
 # Create a scatter plot with color-coding for segments
-def plot_customer_segmentation_scatter_plot(data,x='Recency',y='Frequency',hue='Segment',palette='Set1',s=100,):
-    plt.figure(figsize=(10, 6))
+def plot_customer_segmentation_scatter_plot(data,x='Recency',y='Frequency',hue='Segment',palette='Set1',s=100):
+    """Generates a 2D scatter plot and returns the Figure object."""
+    # Create figure and axes objects explicitly
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Plot on the axes object, passing ax=ax
     sns.scatterplot(
         x=x,
         y=y,
@@ -388,21 +412,43 @@ def plot_customer_segmentation_scatter_plot(data,x='Recency',y='Frequency',hue='
         data=data,
         palette=palette,
         s=s,
+        ax=ax  # Specify the axes to plot on
     )
-    plt.title('Customer Segmentation Scatter Plot')
-    plt.xlabel('Recency')
-    plt.ylabel('Frequency')
-    plt.legend(title='Segment', loc='upper right')
-    # plt.show()
+
+    # Set titles and labels using the axes object
+    ax.set_title('Customer Segmentation Scatter Plot')
+    ax.set_xlabel('Recency')
+    ax.set_ylabel('Frequency')
+    ax.legend(title='Segment', loc='upper right')
+
+    # Return the figure object
     return fig
 
+
 def plot_correlation_heatmap(data, threshold_correlation_value):
-    plt.figure(figsize=(30, 30))
+    """Generates a correlation heatmap and returns the Figure object."""
+    # Create figure and axes objects explicitly
+    # Increase figsize if needed for many variables
+    fig, ax = plt.subplots(figsize=(20, 20)) # Adjusted size
+
     correlation_matrix = data.corr()
-    sns.heatmap(correlation_matrix[(correlation_matrix >= threshold_correlation_value) | (correlation_matrix <= -threshold_correlation_value)], annot=True, fmt=".2f", cmap='coolwarm', square=True, cbar_kws={"shrink": .8})
-    plt.title('Heatmap of Correlation Matrix', fontsize=16)
-    # plt.show()
+
+    # Filter the matrix based on the threshold for display purposes
+    filtered_matrix = correlation_matrix[(correlation_matrix >= threshold_correlation_value) | (correlation_matrix <= -threshold_correlation_value)]
+
+    # Plot on the axes object, passing ax=ax
+    sns.heatmap(filtered_matrix, annot=True, fmt=".2f", cmap='coolwarm',
+                square=True, cbar_kws={"shrink": .8}, ax=ax) # Use filtered_matrix for display
+
+    # Set title using the axes object
+    ax.set_title('Heatmap of Correlation Matrix (Filtered)', fontsize=16)
+
+    # Improve layout to prevent labels overlapping
+    plt.tight_layout()
+
+    # Return the figure object
     return fig
+
 
 def top_n_correlations(df, n_value_for_top_n_correlations=5, correlation_threshold=None):
     # Calculate correlation matrix
@@ -564,7 +610,7 @@ def generate_all_pps_correlation_graphs(df, target_columns, feature_columns=None
 
 
 def plot_pca_scree_plot(data):
-
+    """Performs PCA, generates a scree plot, and returns the Figure object."""
     # Perform PCA
     pca = PCA()
     pca.fit(data)
@@ -575,49 +621,50 @@ def plot_pca_scree_plot(data):
     # Calculate cumulative explained variance
     cumulative_explained_variance = np.cumsum(explained_variance_ratios)
 
-    # Plot the scree plot
-    plt.figure(figsize=(22, 8))
+    # Create figure and axes objects explicitly
+    fig, ax = plt.subplots(figsize=(12, 6)) # Adjusted size
 
 
-    ### Bar Part Start
-
-    # Plot individual explained variance
-    # bars = plt.bar(range(1, len(explained_variance_ratios) + 1), explained_variance_ratios, alpha=0.7, align='center', label='Individual Explained Variance')
-
-    # # Annotate each bar with the percentage of explained variance
+    ### Bar Part (Optional - uncomment if needed) ###
+    # # Plot individual explained variance as bars
+    # bars = ax.bar(range(1, len(explained_variance_ratios) + 1), explained_variance_ratios, alpha=0.7, align='center', label='Individual Explained Variance')
+    # # Annotate each bar
     # for i, bar in enumerate(bars):
     #     height = bar.get_height()
-    #     plt.annotate(f'{height * 100:.2f}%', xy=(bar.get_x() + bar.get_width() / 2, height),
-    #                  xytext=(0, 3),  # 3 points vertical offset
-    #                  textcoords="offset points",
-    #                  ha='center', va='bottom')
-
-    ### Bar Part End
+    #     ax.annotate(f'{height * 100:.2f}%', xy=(bar.get_x() + bar.get_width() / 2, height),
+    #                  xytext=(0, 3), textcoords="offset points", ha='center', va='bottom')
+    ### Bar Part End ###
 
 
-    # Plot individual explained variance as a line
-    plt.plot(range(1, len(explained_variance_ratios) + 1), explained_variance_ratios, marker='o', linestyle='-', label='Individual Explained Variance')
+    # Plot individual explained variance as a line on the axes object
+    ax.plot(range(1, len(explained_variance_ratios) + 1), explained_variance_ratios, marker='o', linestyle='-', label='Individual Explained Variance')
 
-    # Annotate each point with the percentage of explained variance
+    # Annotate each point on the axes object
     for i, var in enumerate(explained_variance_ratios):
-        plt.annotate(f'{var * 100:.2f}%', xy=(i + 1, var),
-                     xytext=(0, 3),  # 3 points vertical offset
+        ax.annotate(f'{var * 100:.2f}%', xy=(i + 1, var),
+                     xytext=(0, 5),  # Adjusted offset slightly
                      textcoords="offset points",
                      ha='center', va='bottom')
 
-    # Plot cumulative explained variance
-    plt.plot(range(1, len(cumulative_explained_variance) + 1), cumulative_explained_variance, marker='o', linestyle='--', color='red', label='Cumulative Explained Variance')
+    # Plot cumulative explained variance on the axes object
+    ax.plot(range(1, len(cumulative_explained_variance) + 1), cumulative_explained_variance, marker='o', linestyle='--', color='red', label='Cumulative Explained Variance')
 
-    # Add labels and title
-    plt.title('PCA Scree Plot')
-    plt.xlabel('Principal Component')
-    plt.ylabel('Explained Variance')
-    plt.xticks(range(1, len(explained_variance_ratios) + 1))
-    plt.grid(True)
-    plt.legend(loc='best')
+    # Add labels and title using the axes object
+    ax.set_title('PCA Scree Plot')
+    ax.set_xlabel('Principal Component')
+    ax.set_ylabel('Explained Variance Ratio')
+    ax.set_xticks(range(1, len(explained_variance_ratios) + 1)) # Ensure ticks for all components
+    ax.grid(True)
+    ax.legend(loc='best')
 
-    # Show the plot
-    plt.show()
+    # Improve layout
+    plt.tight_layout()
+
+    # Remove plt.show()
+    # plt.show()
+
+    # Return the figure object
+    return fig
 # --- End Functions ---
 
 # --- Load data ---
