@@ -185,7 +185,8 @@ def plot_stacked_histogram(data_copy):
     plt.title("Histogram of Spending Across Sectors")
     plt.legend()
     plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.show()
+    # plt.show()
+    return fig
 
 
 def plot_bar_chart(data, columns_to_include=None, rotation=0):
@@ -223,8 +224,8 @@ def plot_bar_chart(data, columns_to_include=None, rotation=0):
         fig.delaxes(axes[j])
 
     plt.tight_layout()  # Adjust layout to prevent overlap
-    plt.show()
-
+    # plt.show()
+    return fig
 
 # Define function for pie charts
 def plot_pie_chart(data,title,variable_name,variable_name_X,variable_name_Y):
@@ -248,8 +249,9 @@ def plot_pie_chart(data,title,variable_name,variable_name_X,variable_name_Y):
         bbox={'facecolor': 'lightgray', 'alpha': 0.5, 'pad': 5}  # Optional: Add a box around the text
     )
 
-    plt.show()
-
+    # plt.show()
+    return fig
+    
 
 # Define function for scatter plots for pairs of variables
 def plot_scatterplot(data, column_for_color=None, columns_to_exclude=None, heading_of_plot=None):
@@ -261,8 +263,9 @@ def plot_scatterplot(data, column_for_color=None, columns_to_exclude=None, headi
 
     sns.pairplot(data_to_plot, diag_kind='kde', markers='o', hue=column_for_color, palette='viridis')
     plt.suptitle(f'{heading_of_plot}', y=1.02)
-    plt.show()
-
+    # plt.show()
+    return fig
+    
 
 def plot_customer_segmentation_3d_interactive_scatter_plot(data, x='Recency', y='Frequency', z='Monetary', hue='Segment', palette='Plotly'):
     # Create the 3D scatter plot
@@ -291,8 +294,8 @@ def plot_customer_segmentation_3d_interactive_scatter_plot(data, x='Recency', y=
     )
 
     # Show the plot
-    fig.show()
-
+    # fig.show()
+    return fig
 
 def plot_customer_segmentation_3d_scatter_plot(data, x='Recency', y='Frequency', z='Monetary', hue='Segment', palette='Set1', s=100):
     plt.figure(figsize=(10, 8))
@@ -320,8 +323,8 @@ def plot_customer_segmentation_3d_scatter_plot(data, x='Recency', y='Frequency',
     ax.set_zlabel(z)
     ax.legend(title='Segment', loc='upper right')
 
-    plt.show()
-
+    # plt.show()
+    return fig
 
 # Function to rank values into 5 groups
 def rank_group(series):
@@ -390,16 +393,16 @@ def plot_customer_segmentation_scatter_plot(data,x='Recency',y='Frequency',hue='
     plt.xlabel('Recency')
     plt.ylabel('Frequency')
     plt.legend(title='Segment', loc='upper right')
-    plt.show()
-
+    # plt.show()
+    return fig
 
 def plot_correlation_heatmap(data, threshold_correlation_value):
     plt.figure(figsize=(30, 30))
     correlation_matrix = data.corr()
     sns.heatmap(correlation_matrix[(correlation_matrix >= threshold_correlation_value) | (correlation_matrix <= -threshold_correlation_value)], annot=True, fmt=".2f", cmap='coolwarm', square=True, cbar_kws={"shrink": .8})
     plt.title('Heatmap of Correlation Matrix', fontsize=16)
-    plt.show()
-
+    # plt.show()
+    return fig
 
 def top_n_correlations(df, n_value_for_top_n_correlations=5, correlation_threshold=None):
     # Calculate correlation matrix
