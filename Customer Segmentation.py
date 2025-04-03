@@ -154,9 +154,9 @@ def plot_histogram(data, columns_to_exclude=None, columns_to_include=None, title
     # Then add right margin for the statistics boxes and top margin for the legend
     fig.tight_layout(rect=[0, 0, 0.82, 0.9])
 
-    plt.show()
+    # plt.show()
 
-    # return fig
+    return fig
 
 
 def plot_stacked_histogram(data_copy):
