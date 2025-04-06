@@ -6,6 +6,20 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from sklearn.cluster import KMeans
+from scipy.cluster.hierarchy import dendrogram, linkage
+import matplotlib.patches as mpatches # For K-Means legend
+from sklearn.metrics import silhouette_score
+from scipy.cluster.hierarchy import fcluster # Needed for hierarchical labels
+import statsmodels.api as sm
+from statsmodels.discrete.count_model import ZeroInflatedPoisson, ZeroInflatedNegativeBinomialP
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import xgboost as xgb
 
 st.set_page_config(layout="wide") # Optional: Use wider layout
 
@@ -57,8 +71,6 @@ def plot_histogram(data, columns_to_exclude=None, columns_to_include=None, title
     fig : matplotlib.figure.Figure
         The figure object containing the histograms
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
 
     # Determine which columns to plot
     if columns_to_exclude is not None:
@@ -158,6 +170,18 @@ def plot_histogram(data, columns_to_exclude=None, columns_to_include=None, title
 
     return fig
 
+def plot_count_histogram(series, title="Histogram of Counts"):
+    """Generates a histogram for count data."""
+    fig, ax = plt.subplots(figsize=(5, 3))
+    counts, bins, patches = ax.hist(series, bins=max(1, series.max() + 1), align='left', rwidth=0.8, alpha=0.7) # Bins for each integer count
+    ax.set_xlabel("Count Value")
+    ax.set_ylabel("Frequency")
+    ax.set_title(title)
+    ax.set_xticks(bins[:-1]) # Label ticks at the start of each bin (integer value)
+    ax.grid(axis='y', linestyle='--', alpha=0.6)
+    plt.tight_layout()
+    return fig
+
 
 def plot_stacked_histogram(data_copy):
 
@@ -170,9 +194,11 @@ def plot_stacked_histogram(data_copy):
     all_expenditures = np.concatenate([primary_expenditure, secondary_expenditure, tertiary_expenditure])
     bins = np.histogram_bin_edges(all_expenditures, bins=15)  # Common bins
 
-    # Plot stacked histogram
-    plt.figure(figsize=(10, 6))
-    plt.hist(
+    # Create figure object explicitly before plotting on it
+    fig, ax = plt.subplots(figsize=(5, 3)) # Use subplots to get fig and ax
+
+    # Plot stacked histogram using the axes object (ax)
+    ax.hist(
         [tertiary_expenditure, secondary_expenditure, primary_expenditure],
         bins=bins,
         stacked=True,
@@ -180,55 +206,109 @@ def plot_stacked_histogram(data_copy):
         label=['Tertiary (gold)', 'Secondary (wine,sweets)', 'Primary (fish,meat,fruit)']
     )
 
-    plt.xlabel("Spending Amount")
-    plt.ylabel("Frequency")
-    plt.title("Histogram of Spending Across Sectors")
-    plt.legend()
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    # plt.show()
+    ax.set_xlabel("Spending Amount") # Use ax.set_xlabel
+    ax.set_ylabel("Frequency")     # Use ax.set_ylabel
+    ax.set_title("Histogram of Spending Across Sectors") # Use ax.set_title
+    ax.legend()                    # Use ax.legend
+    ax.grid(axis='y', linestyle='--', alpha=0.7) # Use ax.grid
+
+    plt.tight_layout() # Optional: improve layout
+    # plt.show() # Commented out for Streamlit
+
+    # Return the figure object
     return fig
 
 
-def plot_bar_chart(data, columns_to_include=None, rotation=0):
-    # If columns_to_include is provided, drop those columns
+
+def plot_bar_chart(data, columns_to_include=None, rotation=0, tick_label_fontsize=8, bar_label_fontsize=8): # Added fontsize args
+    # If columns_to_include is provided, use only those columns
     if columns_to_include is not None:
-        data_to_plot = data[columns_to_include]
+        # Ensure columns_to_include is a list
+        if not isinstance(columns_to_include, list):
+             print('Warning: columns_to_include should be a list. Using all columns.')
+             data_to_plot = data
+        else:
+             # Filter out columns not present in the dataframe to avoid errors
+             valid_cols = [col for col in columns_to_include if col in data.columns]
+             if len(valid_cols) != len(columns_to_include):
+                 missing_cols = [col for col in columns_to_include if col not in data.columns]
+                 print(f"Warning: Columns not found and ignored: {missing_cols}")
+             if not valid_cols:
+                 print("Warning: No valid columns specified in columns_to_include. Using all columns.")
+                 data_to_plot = data
+             else:
+                 data_to_plot = data[valid_cols]
     else:
         data_to_plot = data
 
     # Create a subplot for all specified columns
     num_columns = len(data_to_plot.columns)
-    num_rows = (num_columns // 3) + (num_columns % 3 > 0)  # Calculate number of rows needed for 3 columns
-    fig, axes = plt.subplots(num_rows, 3, figsize=(15, num_rows * 5))  # Create subplots
+    if num_columns == 0:
+        print("No columns to plot.")
+        # Return an empty figure or handle appropriately
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data to plot", ha='center', va='center')
+        return fig
+
+    num_rows = (num_columns + 2) // 3 # Simplified calculation for rows needed (handles 1, 2, 3+ cols)
+    fig, axes = plt.subplots(num_rows, 3, figsize=(12, num_rows * 2), squeeze=False) # Adjusted figsize, ensure axes is 2D
     axes = axes.flatten()  # Flatten the axes array for easy indexing
 
     # Create bar charts for each specified column
     try:
         for i, column in enumerate(data_to_plot.columns):
+            # Ensure the column exists in the original data passed to the function
+            if column not in data.columns:
+                 print(f"Skipping column '{column}' as it's not in the provided data.")
+                 continue
+
             counts = data[column].value_counts().sort_index()  # Sort by index
+
+            # Check if counts is empty (e.g., column had only NaNs)
+            if counts.empty:
+                axes[i].text(0.5, 0.5, f"{column}\n(No data)", ha='center', va='center', fontsize=8)
+                axes[i].set_title(f'{column}', fontsize=10) # Still add title
+                axes[i].set_xticks([]) # Remove ticks if no data
+                axes[i].set_yticks([])
+                continue # Skip plotting for this column
+
             counts.plot(kind='bar', color='skyblue', ax=axes[i])
-            axes[i].set_title(f'{column}', fontsize=16)
-            axes[i].set_xlabel(None, fontsize=14)
-            axes[i].set_ylabel('Frequency', fontsize=14)
-            axes[i].tick_params(axis='x', rotation=rotation)
+            axes[i].set_title(f'{column}', fontsize=10) # Slightly larger title
+            axes[i].set_xlabel(None) # Remove x label default text
+            axes[i].set_ylabel('Frequency', fontsize=9) # Slightly larger y label
+
+            # --- Adjust tick label font sizes ---
+            axes[i].tick_params(axis='x', rotation=rotation, labelsize=tick_label_fontsize)
+            axes[i].tick_params(axis='y', labelsize=tick_label_fontsize)
+            # --- End tick label adjustment ---
+
             axes[i].grid(axis='y', linestyle='--', alpha=0.7)
 
             # Add value labels on top of the bars
-            for j in range(len(counts)):
-                axes[i].text(j, counts.iloc[j], counts.iloc[j], ha='center', va='bottom')
+            for j, value in enumerate(counts):
+                # Use axes[i].get_ylim()[1] to position text relative to axis height
+                # Add a small offset based on the max height
+                max_height = counts.max()
+                offset = max_height * 0.02 # Adjust 2% offset as needed
+                axes[i].text(j, value + offset, f'{value:.0f}', # Format as integer
+                             ha='center', va='bottom',
+                             fontsize=bar_label_fontsize) # <-- Set font size here
 
-    except:
-        print('columns_to_include has to be a list.')
+            # Adjust y-limit to make space for labels
+            axes[i].set_ylim(top=counts.max() * 1.1) # Add 10% padding at the top
 
+    except Exception as e: # Catch specific errors if possible, or general Exception
+        print(f'An error occurred during plotting: {e}')
+
+
+    # Hide unused subplots
     for j in range(num_columns, len(axes)):
         fig.delaxes(axes[j])
 
-    plt.tight_layout()  # Adjust layout to prevent overlap
-    # plt.show()
+    plt.tight_layout(rect=[0, 0, 1, 0.96]) # Add padding for main title if needed
+    # fig.suptitle("Bar Charts", fontsize=14) # Optional overall title
+    # plt.show() # Commented out for Streamlit
     return fig
-
-import matplotlib.pyplot as plt
-import pandas as pd # Assuming data is a pandas Series or DataFrame
 
 # Define function for pie charts
 def plot_pie_chart(data,title,variable_name,variable_name_X,variable_name_Y):
@@ -299,6 +379,7 @@ def plot_customer_segmentation_3d_interactive_scatter_plot(data, x='Recency', y=
 
     # Update layout to move legend outside the plot
     fig.update_layout(
+        height = 1000,
         legend=dict(
             x=1.05,  # Move legend to the right of the plot
             y=1.0,
@@ -316,7 +397,7 @@ def plot_customer_segmentation_3d_interactive_scatter_plot(data, x='Recency', y=
 def plot_customer_segmentation_3d_scatter_plot(data, x='Recency', y='Frequency', z='Monetary', hue='Segment', palette='Set1', s=100):
     """Generates a 3D scatter plot and returns the Figure object."""
     # Create figure and 3D axes ONCE
-    fig = plt.figure(figsize=(10, 8))
+    fig = plt.figure(figsize=(8, 5))
     ax = fig.add_subplot(111, projection='3d')
 
     # Get unique segments and their corresponding colors
@@ -402,7 +483,7 @@ def segment_customer_modified(row):
 def plot_customer_segmentation_scatter_plot(data,x='Recency',y='Frequency',hue='Segment',palette='Set1',s=100):
     """Generates a 2D scatter plot and returns the Figure object."""
     # Create figure and axes objects explicitly
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8, 5))
 
     # Plot on the axes object, passing ax=ax
     sns.scatterplot(
@@ -429,7 +510,7 @@ def plot_correlation_heatmap(data, threshold_correlation_value):
     """Generates a correlation heatmap and returns the Figure object."""
     # Create figure and axes objects explicitly
     # Increase figsize if needed for many variables
-    fig, ax = plt.subplots(figsize=(20, 20)) # Adjusted size
+    fig, ax = plt.subplots(figsize=(8, 8)) # Adjusted size
 
     correlation_matrix = data.corr()
 
@@ -566,7 +647,7 @@ def create_pps_correlation_graph(df, target_column, feature_columns=None):
         corr_vals = [corr_vals[i] for i in indices]
 
     # Create the plot
-    fig, ax = plt.subplots(figsize=(15, 7))
+    fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(feature_names, corr_vals, marker='o', label='Correlation')
     ax.plot(feature_names, pps_vals, marker='o', label='PPS')
     ax.set_xlabel(f'Feature predictive power score of {target_column}')
@@ -622,7 +703,7 @@ def plot_pca_scree_plot(data):
     cumulative_explained_variance = np.cumsum(explained_variance_ratios)
 
     # Create figure and axes objects explicitly
-    fig, ax = plt.subplots(figsize=(12, 6)) # Adjusted size
+    fig, ax = plt.subplots(figsize=(8, 3)) # Adjusted size
 
 
     ### Bar Part (Optional - uncomment if needed) ###
@@ -644,18 +725,25 @@ def plot_pca_scree_plot(data):
         ax.annotate(f'{var * 100:.2f}%', xy=(i + 1, var),
                      xytext=(0, 5),  # Adjusted offset slightly
                      textcoords="offset points",
-                     ha='center', va='bottom')
+                     ha='center', va='bottom',
+                     fontsize=8)
 
     # Plot cumulative explained variance on the axes object
     ax.plot(range(1, len(cumulative_explained_variance) + 1), cumulative_explained_variance, marker='o', linestyle='--', color='red', label='Cumulative Explained Variance')
 
     # Add labels and title using the axes object
-    ax.set_title('PCA Scree Plot')
-    ax.set_xlabel('Principal Component')
-    ax.set_ylabel('Explained Variance Ratio')
-    ax.set_xticks(range(1, len(explained_variance_ratios) + 1)) # Ensure ticks for all components
+    ax.set_title('PCA Scree Plot', fontsize=10)
+    ax.set_xlabel('Principal Component', fontsize=10)
+    ax.set_ylabel('Explained Variance Ratio', fontsize=10)
+
+    # Set x-axis ticks and adjust their font size
+    x_range = range(1, len(explained_variance_ratios) + 1)
+    ax.set_xticks(x_range)
+    ax.tick_params(axis='x', labelsize=10)
+    ax.tick_params(axis='y', labelsize=10)
+
     ax.grid(True)
-    ax.legend(loc='best')
+    ax.legend(loc='best', fontsize=8)
 
     # Improve layout
     plt.tight_layout()
@@ -665,6 +753,89 @@ def plot_pca_scree_plot(data):
 
     # Return the figure object
     return fig
+
+
+# --- New Plotting Functions ---
+def plot_dendrogram(linkage_matrix, optimal_y_value):
+    """Generates a dendrogram plot and returns the Figure object."""
+    fig, ax = plt.subplots(figsize=(8, 4)) # Adjusted size
+    dendrogram(linkage_matrix, ax=ax)
+    ax.set_title('Dendrogram for Hierarchical Clustering')
+    ax.set_xlabel('Data Points (or Clusters)')
+    ax.set_ylabel('Distance (Ward Linkage)')
+    ax.axhline(y=optimal_y_value, color='r', linestyle='--', label=f'Optimal Cut ({optimal_y_value:.2f})')
+    ax.legend()
+    plt.tight_layout()
+    return fig
+
+def plot_tsne(tsne_data):
+    """Generates a t-SNE scatter plot and returns the Figure object."""
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.scatter(tsne_data[:, 0], tsne_data[:, 1], s=10, alpha=0.7) # Smaller points, slight transparency
+    ax.set_title('t-SNE Visualization of Data')
+    ax.set_xlabel('t-SNE Component 1')
+    ax.set_ylabel('t-SNE Component 2')
+    ax.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    return fig
+
+def plot_hierarchical_on_tsne(tsne_data, labels, n_clusters):
+    """Generates a plot of Hierarchical clusters on t-SNE data."""
+    fig, ax = plt.subplots(figsize=(6, 4))
+    scatter = ax.scatter(tsne_data[:, 0], tsne_data[:, 1], c=labels, cmap='viridis', s=20, alpha=0.8)
+    ax.set_title(f'Hierarchical Clustering (k={n_clusters}) on t-SNE')
+    ax.set_xlabel('t-SNE Component 1')
+    ax.set_ylabel('t-SNE Component 2')
+    ax.grid(True, linestyle='--', alpha=0.5)
+
+    # Create legend (handle potentially non-contiguous labels from fcluster)
+    unique_labels = np.unique(labels)
+    colors = [scatter.cmap(scatter.norm(label)) for label in unique_labels]
+    patches = [mpatches.Patch(color=colors[i], label=f'Cluster {unique_labels[i]}') for i in range(len(unique_labels))]
+    ax.legend(handles=patches, title='Cluster Labels', loc='best')
+
+    plt.tight_layout()
+    return fig
+
+def plot_kmeans_clusters(tsne_data, labels, n_clusters):
+    """Generates a K-Means cluster plot on t-SNE data and returns the Figure object."""
+    fig, ax = plt.subplots(figsize=(6, 4)) # Adjusted size
+    scatter = ax.scatter(tsne_data[:, 0], tsne_data[:, 1], c=labels, cmap='viridis', s=20, alpha=0.8) # Adjusted size/alpha
+    ax.set_title(f'K-means Clustering ({n_clusters} Clusters) on t-SNE')
+    ax.set_xlabel('t-SNE Component 1')
+    ax.set_ylabel('t-SNE Component 2')
+    ax.grid(True, linestyle='--', alpha=0.5)
+
+    # Create legend
+    unique_labels = np.unique(labels)
+    # Use matplotlib patches for legend handles
+    patches = [mpatches.Patch(color=scatter.cmap(scatter.norm(label)), label=f'Cluster {label}') for label in unique_labels]
+    ax.legend(handles=patches, title='Cluster Labels', loc='best',
+                  title_fontsize=6, # <-- Font size for legend title
+                  fontsize=6)
+
+    plt.tight_layout()
+    return fig
+
+def plot_actual_vs_predicted(y_actual, y_predicted, title="Actual vs. Predicted Counts"):
+    """Generates a scatter plot of actual vs predicted values."""
+    fig, ax = plt.subplots(figsize=(3, 3))
+    max_val = max(y_actual.max(), y_predicted.max()) * 1.1
+    min_val = min(y_actual.min(), y_predicted.min()) * 0.9
+    ax.scatter(y_actual, y_predicted, alpha=0.5, label='Predictions')
+    ax.plot([min_val, max_val], [min_val, max_val], 'r--', label='Perfect Fit (y=x)')
+    ax.set_xlabel("Actual Counts")
+    ax.set_ylabel("Predicted Counts")
+    ax.set_title(title)
+    ax.legend()
+    ax.grid(True)
+    ax.set_xlim(min_val, max_val)
+    ax.set_ylim(min_val, max_val)
+    plt.tight_layout()
+    return fig
+# --- End New Plotting Functions ---
+
+
 # --- End Functions ---
 
 # --- Load data ---
@@ -767,6 +938,85 @@ if 'duplicate_rows_df' not in st.session_state:
     st.session_state.duplicate_rows_df = None
 if 'show_duplicates' not in st.session_state:
     st.session_state.show_duplicates = False
+
+# State for Modeling Preparation
+if 'data_prepared_for_modeling' not in st.session_state: st.session_state.data_prepared_for_modeling = None
+if 'modeling_data_prepared' not in st.session_state: st.session_state.modeling_data_prepared = False
+
+# State for Outlier Detection
+if 'data_no_outliers' not in st.session_state: st.session_state.data_no_outliers = None
+if 'outliers_removed' not in st.session_state: st.session_state.outliers_removed = False
+if 'num_outliers_removed' not in st.session_state: st.session_state.num_outliers_removed = 0
+
+# State for Scaling and PCA
+if 'scaled_data' not in st.session_state: st.session_state.scaled_data = None
+if 'pca_data' not in st.session_state: st.session_state.pca_data = None
+if 'pca_model' not in st.session_state: st.session_state.pca_model = None
+if 'pca_done' not in st.session_state: st.session_state.pca_done = False
+if 'pca_scree_fig' not in st.session_state: st.session_state.pca_scree_fig = None
+if 'show_pca_scree' not in st.session_state: st.session_state.show_pca_scree = False
+
+# State for Hierarchical Clustering
+if 'linkage_matrix' not in st.session_state: st.session_state.linkage_matrix = None
+if 'hierarchical_done' not in st.session_state: st.session_state.hierarchical_done = False
+if 'dendrogram_fig' not in st.session_state: st.session_state.dendrogram_fig = None
+if 'show_dendrogram' not in st.session_state: st.session_state.show_dendrogram = False
+
+# State for t-SNE
+if 'tsne_data' not in st.session_state: st.session_state.tsne_data = None
+if 'tsne_done' not in st.session_state: st.session_state.tsne_done = False
+if 'tsne_plot_fig' not in st.session_state: st.session_state.tsne_plot_fig = None
+if 'show_tsne_plot' not in st.session_state: st.session_state.show_tsne_plot = False
+
+# State for K-Means
+if 'n_clusters' not in st.session_state: st.session_state.n_clusters = 5 # Default k
+if 'kmeans_labels' not in st.session_state: st.session_state.kmeans_labels = None
+if 'kmeans_done' not in st.session_state: st.session_state.kmeans_done = False
+if 'kmeans_plot_fig' not in st.session_state: st.session_state.kmeans_plot_fig = None
+if 'show_kmeans_plot' not in st.session_state: st.session_state.show_kmeans_plot = False
+
+# State for Silhouette Scores
+if 'hierarchical_silhouette' not in st.session_state: st.session_state.hierarchical_silhouette = None
+if 'kmeans_silhouette' not in st.session_state: st.session_state.kmeans_silhouette = None
+if 'hierarchical_n_clusters' not in st.session_state: st.session_state.hierarchical_n_clusters = None # Store k for hierarchical
+
+# # State for Zero-Inflated Model
+# if 'zi_model_type' not in st.session_state: st.session_state.zi_model_type = 'ZIP' # Default ZI Poisson
+# if 'zi_model_fitted' not in st.session_state: st.session_state.zi_model_fitted = None
+# if 'zi_predictions' not in st.session_state: st.session_state.zi_predictions = None
+# if 'zi_y_test' not in st.session_state: st.session_state.zi_y_test = None # Store actual test values
+# if 'zi_mae' not in st.session_state: st.session_state.zi_mae = None
+# if 'zi_rmse' not in st.session_state: st.session_state.zi_rmse = None
+# if 'zi_baseline_mae' not in st.session_state: st.session_state.zi_baseline_mae = None
+# if 'zi_baseline_rmse' not in st.session_state: st.session_state.zi_baseline_rmse = None
+# if 'zi_plot_fig' not in st.session_state: st.session_state.zi_plot_fig = None
+# if 'zi_model_trained_success' not in st.session_state: st.session_state.zi_model_trained_success = False # Track if training completed
+
+# # State for Target Variable Histogram
+# if 'numacceptedcmps_hist_fig' not in st.session_state: st.session_state.numacceptedcmps_hist_fig = None
+# if 'show_numacceptedcmps_hist' not in st.session_state: st.session_state.show_numacceptedcmps_hist = False
+
+# # State for Overdispersion Check
+# if 'overdispersion_alpha' not in st.session_state: st.session_state.overdispersion_alpha = None
+# if 'overdispersion_checked' not in st.session_state: st.session_state.overdispersion_checked = False
+
+# # State for Hierarchical Clusters on t-SNE plot
+# if 'hierarchical_tsne_fig' not in st.session_state: st.session_state.hierarchical_tsne_fig = None
+# if 'show_hierarchical_tsne_plot' not in st.session_state: st.session_state.show_hierarchical_tsne_plot = False
+# if 'hierarchical_labels_for_tsne' not in st.session_state: st.session_state.hierarchical_labels_for_tsne = None # Store labels used for the plot
+
+# State for XGBoost Model
+if 'xgb_model_fitted' not in st.session_state: st.session_state.xgb_model_fitted = None
+if 'xgb_predictions' not in st.session_state: st.session_state.xgb_predictions = None
+if 'xgb_y_test' not in st.session_state: st.session_state.xgb_y_test = None # Store actual test values
+if 'xgb_mae' not in st.session_state: st.session_state.xgb_mae = None
+if 'xgb_rmse' not in st.session_state: st.session_state.xgb_rmse = None
+if 'xgb_baseline_mae' not in st.session_state: st.session_state.xgb_baseline_mae = None
+if 'xgb_baseline_rmse' not in st.session_state: st.session_state.xgb_baseline_rmse = None
+if 'xgb_plot_fig' not in st.session_state: st.session_state.xgb_plot_fig = None
+if 'xgb_model_trained_success' not in st.session_state: st.session_state.xgb_model_trained_success = False # Track if training completed
+if 'xgb_feature_importances_fig' not in st.session_state: st.session_state.xgb_feature_importances_fig = None # For feature importance
+
 # --- End Initialization ---
 
 
@@ -927,7 +1177,7 @@ if st.session_state.data is not None:
         if st.session_state.get('show_product_hist', False):
             st.subheader("Product Spending Distribution")
             if st.session_state.product_hist_fig:
-                st.pyplot(st.session_state.product_hist_fig) # Use st.pyplot for matplotlib
+                st.pyplot(st.session_state.product_hist_fig, use_container_width=False) # Use st.pyplot for matplotlib
                 if st.button("Hide Product Histogram", key="hide_prod_hist_btn"):
                     st.session_state.show_product_hist = False
                     st.rerun()
@@ -936,7 +1186,7 @@ if st.session_state.data is not None:
         if st.session_state.get('show_product_pie', False):
             st.subheader("Product Shares Pie Chart")
             if st.session_state.product_pie_fig:
-                st.plotly_chart(st.session_state.product_pie_fig) # Use st.plotly_chart for Plotly
+                st.pyplot(st.session_state.product_pie_fig, use_container_width=False) # Use st.plotly_chart for Plotly
                 if st.button("Hide Product Pie Chart", key="hide_prod_pie_btn"):
                     st.session_state.show_product_pie = False
                     st.rerun()
@@ -945,7 +1195,7 @@ if st.session_state.data is not None:
         if st.session_state.get('show_product_stacked_hist', False):
             st.subheader("Product Stacked Histogram")
             if st.session_state.product_stacked_hist_fig:
-                st.pyplot(st.session_state.product_stacked_hist_fig)
+                st.pyplot(st.session_state.product_stacked_hist_fig, use_container_width=False)
                 if st.button("Hide Product Stacked Hist", key="hide_prod_stack_btn"):
                     st.session_state.show_product_stacked_hist = False
                     st.rerun()
@@ -954,7 +1204,7 @@ if st.session_state.data is not None:
         if st.session_state.get('show_product_log_hist', False):
             st.subheader("Log-Transformed Product Spending Distribution")
             if st.session_state.product_log_hist_fig:
-                st.pyplot(st.session_state.product_log_hist_fig)
+                st.pyplot(st.session_state.product_log_hist_fig, use_container_width=False)
                 if st.button("Hide Log Product Hist", key="hide_prod_log_btn"):
                     st.session_state.show_product_log_hist = False
                     st.rerun()
@@ -1085,7 +1335,7 @@ if st.session_state.data is not None:
         if st.session_state.get('show_age_hist', False):
             st.subheader("Age on Enrollment vs. Age on Last Enrollment Date")
             if st.session_state.age_hist_fig:
-                st.pyplot(st.session_state.age_hist_fig)
+                st.pyplot(st.session_state.age_hist_fig, use_container_width=False)
                 if st.button("Hide Age Histograms", key="hide_age_hist_btn"):
                     st.session_state.show_age_hist = False
                     st.rerun()
@@ -1124,7 +1374,7 @@ if st.session_state.data is not None:
         if st.session_state.get('show_circumstances_bar', False):
             st.subheader("Distribution of Circumstances")
             if st.session_state.circumstances_bar_fig:
-                st.pyplot(st.session_state.circumstances_bar_fig) # Or st.plotly_chart if it returns Plotly
+                st.pyplot(st.session_state.circumstances_bar_fig, use_container_width=False) # Or st.plotly_chart if it returns Plotly
                 if st.button("Hide Circumstances Chart", key="hide_circ_bar_btn"):
                     st.session_state.show_circumstances_bar = False
                     st.rerun()
@@ -1192,19 +1442,19 @@ if st.session_state.data is not None:
                 cols_to_plot = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
                 valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
                 if valid_cols:
-                     st.session_state.place_bar_fig = plot_bar_chart(st.session_state.data[valid_cols],rotation=0)
-                     st.session_state.show_place_bar = True
+                    st.session_state.place_bar_fig = plot_bar_chart(st.session_state.data[valid_cols],rotation=0)
+                    st.session_state.show_place_bar = True
                 else:
-                     st.warning(f"Not all required columns found in data: {cols_to_plot}")
+                    st.warning(f"Not all required columns found in data: {cols_to_plot}")
         with col_pl2:
              if st.button("Show Place Pie Chart", key="show_place_pie_btn"):
                 cols_to_plot = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
                 valid_cols = [col for col in cols_to_plot if col in st.session_state.data.columns]
                 if valid_cols:
-                     st.session_state.place_pie_fig = plot_pie_chart(st.session_state.data[valid_cols],title='Shares of different Platforms used for purchase',variable_name='Total Number of Pruchases',variable_name_X=-1.4,variable_name_Y=1)
-                     st.session_state.show_place_pie = True
+                    st.session_state.place_pie_fig = plot_pie_chart(st.session_state.data[valid_cols],title='Shares of different Platforms used for purchase',variable_name='Total Number of Pruchases',variable_name_X=-1.4,variable_name_Y=1)
+                    st.session_state.show_place_pie = True
                 else:
-                     st.warning(f"Not all required columns found in data: {cols_to_plot}")
+                    st.warning(f"Not all required columns found in data: {cols_to_plot}")
     
         st.markdown("""
         **Catalog Purchase**
@@ -1252,7 +1502,11 @@ if st.session_state.data is not None:
         | Attribute | Description |
         |---|---|
         | Recency | Number of days since customer's last purchase |
-        | Complain | 1 if the customer complained in the last 2 years, 0 otherwise |
+        | Frequency | Sum of 'NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases' |
+        | Monetary | Sum of 'NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases' |
+        | NumAcceptedCmps | Sum of 'AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response' |
+        | Age_On_Last_Enrollment_Date | Age on the last enrollment date in the dataset for better time context |
+        | Customer_Tenure_months | No. of months passed since the date of enrollment |
         | NumWebVisitsMonth | Number of visits to company’s website in the last month |
     
         
@@ -1260,70 +1514,83 @@ if st.session_state.data is not None:
     
         # --- Button to Perform Feature Engineering ---
         if st.button("Perform Feature Engineering", key="do_feature_eng"):
-             if st.session_state.data is not None:
-                 try:
-                     data_copy = st.session_state.data.copy() # Start fresh
-    
-                     # Ensure correct dtypes before calculations
-                     data_copy['Dt_Customer'] = pd.to_datetime(data_copy['Dt_Customer'], errors='coerce')
-                     data_copy['Income'] = pd.to_numeric(data_copy['Income'], errors='coerce').fillna(0) # Fill NA income with 0 for ratio calculation safety
-                     numeric_cols = ['MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds',
-                                     'NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases',
-                                     'AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response',
-                                     'Customer_Tenure_months', 'NumWebVisitsMonth', 'Recency']
-                     for col in numeric_cols:
-                         if col in data_copy.columns:
-                             data_copy[col] = pd.to_numeric(data_copy[col], errors='coerce').fillna(0)
-    
-                     data_copy.dropna(subset=['Dt_Customer'], inplace=True) # Need Dt_Customer for tenure
-    
-                     # Calculate Tenure
-                     latest_date = data_copy['Dt_Customer'].max() + pd.DateOffset(days=1)
-                     data_copy['Customer_Tenure_months'] = ((latest_date - data_copy['Dt_Customer']).dt.days / 30.0).astype(float) # Use 30.0 for float division
-    
-                     # Calculate Monetary
-                     Products_columns = ['MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds']
-                     data_copy['Monetary'] = data_copy[Products_columns].sum(axis=1)
-    
-                     # Calculate Avg_Purchase_Per_Month - handle potential division by zero
-                     data_copy['Avg_Purchase_Per_Month'] = np.where(
-                         data_copy['Customer_Tenure_months'] > 0,
-                         round(data_copy['Monetary'] / data_copy['Customer_Tenure_months'], 3),
-                         0 # Set to 0 if tenure is 0 or less
-                     )
-    
-                     # Calculate NumAcceptedCmps
-                     campaign_cols = ['AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response']
-                     data_copy['NumAcceptedCmps'] = data_copy[campaign_cols].sum(axis=1)
-    
-                     # Calculate Avg_Purchase_Per_Month_To_Monthly_Income_Ratio
-                     # Income already handled (fillna(0))
-                     # Check for tenure > 0 and income > 0
-                     data_copy['Avg_Purchase_Per_Month_To_Monthly_Income_Ratio'] = np.where(
-                         (data_copy['Customer_Tenure_months'] > 0) & (data_copy['Income'] > 0),
-                         round(data_copy['Avg_Purchase_Per_Month'] / (data_copy['Income'] / 12.0), 3), # Monthly income estimate
-                         0 # Set to 0 if tenure or income is zero or less
-                     )
-    
-                     # Calculate Ratio_of_Deals_Purchases_to_Total_Purchases
-                     purchase_cols = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
-                     total_purchases = data_copy[purchase_cols].sum(axis=1)
-                     data_copy['Ratio_of_Deals_Purchases_to_Total_Purchases'] = np.where(
-                         total_purchases > 0,
-                         round(data_copy['NumDealsPurchases'] / total_purchases, 3),
-                         0 # Set to 0 if total purchases are 0
-                     )
-    
-                     st.session_state.data_copy_engineered = data_copy
-                     st.session_state.feature_engineering_done = True
-                     # Clear RFM state if features are re-engineered
-                     st.session_state.rfm_calculated = False
-                     st.success("Feature engineering complete. You can now view related analyses.")
-                 except Exception as e:
-                     st.error(f"Error during feature engineering: {e}")
-                     st.session_state.feature_engineering_done = False
-             else:
-                 st.warning("Load data first.")
+            if st.session_state.data is not None:
+                try:
+                    data_copy = st.session_state.data.copy() # Start fresh
+
+                    # Ensure correct dtypes before calculations
+                    data_copy['Dt_Customer'] = pd.to_datetime(data_copy['Dt_Customer'], errors='coerce')
+                    data_copy.dropna(subset=['Dt_Customer', 'Year_Birth'], inplace=True) # Drop rows where calculation isn't possible
+                    latest_enrollment_date = data_copy['Dt_Customer'].max()
+                    data_copy['Age_On_Last_Enrollment_Date'] = latest_enrollment_date.year - data_copy['Year_Birth']
+                    
+
+                    # Ensure correct dtypes before calculations
+                    data_copy['Income'] = pd.to_numeric(data_copy['Income'], errors='coerce').fillna(0) # Fill NA income with 0 for ratio calculation safety
+                    numeric_cols = ['MntWines','MntFruits','MntMeatProducts','MntFishProducts','MntSweetProducts','MntGoldProds',
+                                    'NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases',
+                                    'AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response',
+                                    'Customer_Tenure_months','Age_On_Last_Enrollment_Date','NumWebVisitsMonth','Recency']
+
+                    for col in numeric_cols:
+                        if col in data_copy.columns:
+                            data_copy[col] = pd.to_numeric(data_copy[col], errors='coerce').fillna(0)
+
+                    data_copy.dropna(subset=['Dt_Customer'], inplace=True) # Need Dt_Customer for tenure
+
+                    # Calculate Tenure
+                    latest_date = data_copy['Dt_Customer'].max() + pd.DateOffset(days=1)
+                    data_copy['Customer_Tenure_months'] = ((latest_date - data_copy['Dt_Customer']).dt.days / 30.0).astype(float) # Use 30.0 for float division
+
+                    # Calculate Frequency
+                    Place_columns = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
+                    data_copy['Frequency'] = data_copy[Place_columns].sum(axis=1)
+
+                    # Calculate Monetary
+                    Products_columns = ['MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds']
+                    data_copy['Monetary'] = data_copy[Products_columns].sum(axis=1)
+
+                    # # Calculate Avg_Purchase_Per_Month - handle potential division by zero
+                    # data_copy['Avg_Purchase_Per_Month'] = np.where(
+                    #     data_copy['Customer_Tenure_months'] > 0,
+                    #     round(data_copy['Monetary'] / data_copy['Customer_Tenure_months'], 3),
+                    #     0 # Set to 0 if tenure is 0 or less
+                    # )
+
+                    # Calculate NumAcceptedCmps
+                    campaign_cols = ['AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response']
+                    data_copy['NumAcceptedCmps'] = data_copy[campaign_cols].sum(axis=1)
+
+                    # Calculate Avg_Purchase_Per_Month_To_Monthly_Income_Ratio
+                    # Income already handled (fillna(0))
+                    
+                    # # Check for tenure > 0 and income > 0
+                    # data_copy['Avg_Purchase_Per_Month_To_Monthly_Income_Ratio'] = np.where(
+                    #     (data_copy['Customer_Tenure_months'] > 0) & (data_copy['Income'] > 0),
+                    #     round(data_copy['Avg_Purchase_Per_Month'] / (data_copy['Income'] / 12.0), 3), # Monthly income estimate
+                    #     0 # Set to 0 if tenure or income is zero or less
+                    # )
+
+                    # Calculate Ratio_of_Deals_Purchases_to_Total_Purchases
+                    purchase_cols = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
+                    total_purchases = data_copy[purchase_cols].sum(axis=1)
+                    
+                    # data_copy['Ratio_of_Deals_Purchases_to_Total_Purchases'] = np.where(
+                    #     total_purchases > 0,
+                    #     round(data_copy['NumDealsPurchases'] / total_purchases, 3),
+                    #     0 # Set to 0 if total purchases are 0
+                    # )
+
+                    st.session_state.data_copy_engineered = data_copy
+                    st.session_state.feature_engineering_done = True
+                    # Clear RFM state if features are re-engineered
+                    st.session_state.rfm_calculated = False
+                    st.success("Feature engineering complete. You can now view related analyses.")
+                except Exception as e:
+                    st.error(f"Error during feature engineering: {e}")
+                    st.session_state.feature_engineering_done = False
+            else:
+                st.warning("Load data first.")
     
         # --- Action Buttons dependent on Feature Engineering ---
         if st.session_state.get('feature_engineering_done', False):
@@ -1334,18 +1601,18 @@ if st.session_state.data is not None:
     
             with col_fa1:
                 if st.button("Show Engineered Data Sample", key="show_actions_eng_btn"):
-                    cols_to_show = ['NumWebPurchases','NumCatalogPurchases','NumDealsPurchases','NumStorePurchases','NumWebVisitsMonth','Recency','NumAcceptedCmps','Ratio_of_Deals_Purchases_to_Total_Purchases','Avg_Purchase_Per_Month','Avg_Purchase_Per_Month_To_Monthly_Income_Ratio']
-                    st.session_state.actions_eng_df = engineered_df[cols_to_show].head() # Show head
+                    cols_to_show = ['Age_On_Last_Enrollment_Date','Customer_Tenure_months','NumAcceptedCmps','Recency','Frequency','Monetary']
+                    st.session_state.actions_eng_df = engineered_df[cols_to_show].sample(5) # Show head
                     st.session_state.show_actions_eng = True
             with col_fa2:
-                if st.button("Show Tenure >= 6m Histograms", key="show_actions_tenure_btn"):
-                     cols_to_plot = ['Avg_Purchase_Per_Month','Avg_Purchase_Per_Month_To_Monthly_Income_Ratio','NumAcceptedCmps','Ratio_of_Deals_Purchases_to_Total_Purchases']
-                     df_filtered = engineered_df[engineered_df['Customer_Tenure_months']>=6]
-                     st.session_state.actions_tenure_hist_fig = plot_histogram(df_filtered[cols_to_plot],title='Analysis of Customer Tenures of at least 6 months')
+                if st.button("Show Tenure >= 2m Histograms", key="show_actions_tenure_btn"):
+                     cols_to_plot = ['NumAcceptedCmps']
+                     df_filtered = engineered_df[engineered_df['Customer_Tenure_months']>=2]
+                     st.session_state.actions_tenure_hist_fig = plot_histogram(df_filtered[cols_to_plot],title='Analysis of Customer Tenures of at least 2 months')
                      st.session_state.show_actions_tenure_hist = True
             with col_fa3:
                 if st.button("Show Recent Customers with 0 Visits", key="show_actions_novisit_btn"):
-                    cols_to_show = ['NumWebPurchases','NumCatalogPurchases','NumDealsPurchases','NumStorePurchases','NumWebVisitsMonth','Recency','Monetary','NumAcceptedCmps','Avg_Purchase_Per_Month','Avg_Purchase_Per_Month_To_Monthly_Income_Ratio']
+                    cols_to_show = ['NumWebPurchases','NumCatalogPurchases','NumDealsPurchases','NumStorePurchases','NumWebVisitsMonth','Recency','Monetary','NumAcceptedCmps']
                     df_filtered = engineered_df[((engineered_df['Recency'] > 0) & (engineered_df['NumWebVisitsMonth'] == 0))]
                     st.session_state.actions_no_visits_df = df_filtered[cols_to_show]
                     st.session_state.show_actions_no_visits = True
@@ -1487,9 +1754,9 @@ if st.session_state.data is not None:
                     if not all(col in rfm_data.columns for col in required_rfm_cols):
                          st.error("Required columns (ID, Recency, Monetary) not found in engineered data. Rerun Feature Engineering.")
                     else:
-                        # Calculate Frequency (if not already done, though it should be in Monetary section)
-                        Place_columns = ['NumDealsPurchases', 'NumWebPurchases','NumCatalogPurchases', 'NumStorePurchases']
-                        rfm_data['Frequency'] = rfm_data[Place_columns].sum(axis=1)
+                        # # Calculate Frequency (if not already done, though it should be in Monetary section)
+                        # Place_columns = ['NumDealsPurchases', 'NumWebPurchases','NumCatalogPurchases', 'NumStorePurchases']
+                        # rfm_data['Frequency'] = rfm_data[Place_columns].sum(axis=1)
     
                         # Store the raw RFM values DataFrame view
                         st.session_state.rfm_df = rfm_data[['ID','Recency','Frequency','Monetary']]
@@ -1591,6 +1858,1165 @@ if st.session_state.data is not None:
                     st.session_state.show_rfm_3d_interactive = False
                     st.rerun()
             else: st.warning("Calculate RFM first.")
+    
+
+    # Replace the entire "Outlier Detection & Clustering" section
+    # (from `# ==================================================` down to the end of its `with st.expander(...)` block)
+    # with this modified version:
+
+    # ==================================================
+    # Section: Outlier Detection & Clustering
+    # ==================================================
+    st.markdown("---")
+    st.header("Outlier Detection & Clustering")
+    with st.expander("Show Modeling Steps", expanded=True): # Start expanded
+
+        # --- Step 1: Prepare Data for Modeling ---
+        st.subheader("Step 1: Prepare Data for Modeling")
+        st.markdown("*(Requires Feature Engineering to be completed first)*")
+
+        if st.session_state.get('feature_engineering_done', False):
+            if st.button("Prepare Data (Encode & Drop Features)", key="prep_model_data_btn"):
+                if st.session_state.data_copy_engineered is not None:
+                    try:
+                        data_prep = st.session_state.data_copy_engineered.copy()
+
+                        # Apply One-Hot Encoding
+                        categorical_cols = ['Education', 'Marital_Status']
+                        for col in categorical_cols:
+                            if col in data_prep.columns:
+                                # Ensure NaNs are explicitly handled or ignored if needed before get_dummies
+                                # For simplicity here, assuming NaNs in these cols are not intended or handled upstream
+                                dummies = pd.get_dummies(data_prep[col], prefix=col, drop_first=True, dummy_na=False) # dummy_na=False prevents NA column
+                                data_prep.drop(col, axis=1, inplace=True)
+                                data_prep = pd.concat([data_prep, dummies], axis=1)
+                                st.write(f"Applied One-Hot Encoding to '{col}'.")
+
+                        # Drop specified columns
+                        columns_to_drop = ['ID', 'Dt_Customer', 'Year_Birth', 'Age_On_Enrollment_Day', 'MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds',
+                                    'NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases',
+                                           'AcceptedCmp3', 'AcceptedCmp4', 'AcceptedCmp5',
+                                           'AcceptedCmp1', 'AcceptedCmp2', 'Complain',
+                                           'Z_CostContact', 'Z_Revenue', 'Response']
+                        actual_cols_to_drop = [col for col in columns_to_drop if col in data_prep.columns]
+                        data_prep.drop(columns=actual_cols_to_drop, axis=1, inplace=True)
+                        st.write(f"Dropped columns: {', '.join(actual_cols_to_drop)}")
+
+                        # # Handle potential infinite values or NaNs introduced (e.g., from ratios) before modeling
+                        # data_prep.replace([np.inf, -np.inf], np.nan, inplace=True)
+                        # cols_with_na = data_prep.isnull().sum()
+                        # cols_to_fill = cols_with_na[cols_with_na > 0].index.tolist()
+                        # if cols_to_fill:
+                        #      # Simple fill with 0 - review if median/mean is better for specific cols
+                        #     data_prep.fillna(0, inplace=True)
+                        #     st.warning(f"Filled NAs with 0 in columns: {', '.join(cols_to_fill)} before modeling.")
+
+                        st.session_state.data_prepared_for_modeling = data_prep
+                        st.session_state.modeling_data_prepared = True
+                        # Reset downstream steps if data is re-prepared
+                        st.session_state.outliers_removed = False
+                        st.session_state.pca_done = False
+                        st.session_state.tsne_done = False
+                        st.session_state.hierarchical_done = False
+                        st.session_state.kmeans_done = False
+                        # Hide plots from previous runs if data is re-prepared
+                        st.session_state.show_pca_scree = False
+                        st.session_state.show_dendrogram = False
+                        st.session_state.show_tsne_plot = False
+                        st.session_state.show_kmeans_plot = False
+
+                        st.success("Data prepared for modeling.")
+                        st.dataframe(st.session_state.data_prepared_for_modeling.head()) # Show sample
+
+                    except Exception as e:
+                        st.error(f"Error during data preparation: {e}")
+                        st.session_state.modeling_data_prepared = False
+                else:
+                    st.warning("Engineered data not found. Run Feature Engineering first.")
+        else:
+            st.info("Run Feature Engineering first to enable data preparation.")
+        st.markdown("---") # Separator after step
+
+        # --- Step 2: Outlier Detection ---
+        st.subheader("Step 2: Detect and Remove Outliers")
+        if st.session_state.get('modeling_data_prepared', False):
+            contamination_level = st.slider("Select Contamination Level (Outlier %)", 0.001, 0.1, 0.01, 0.001, format="%.3f", key="iso_contamination")
+
+            if st.button("Run Isolation Forest", key="run_iso_forest_btn"):
+                if st.session_state.data_prepared_for_modeling is not None:
+                    try:
+                        data_to_scan = st.session_state.data_prepared_for_modeling
+
+                        iso_forest = IsolationForest(n_estimators=100,
+                                                     contamination=contamination_level,
+                                                     random_state=42,
+                                                     n_jobs=-1)
+                        st.write(f"Fitting Isolation Forest (contamination={contamination_level:.3f})...")
+                        iso_forest.fit(data_to_scan)
+                        st.write("Predicting outliers...")
+                        outlier_predictions = iso_forest.predict(data_to_scan)
+
+                        is_inlier = outlier_predictions == 1
+                        n_outliers_found = (outlier_predictions == -1).sum()
+                        st.session_state.num_outliers_removed = n_outliers_found
+
+                        st.session_state.data_no_outliers = data_to_scan[is_inlier].copy()
+                        st.session_state.outliers_removed = True
+                        # Reset downstream steps
+                        st.session_state.pca_done = False
+                        st.session_state.tsne_done = False
+                        st.session_state.hierarchical_done = False
+                        st.session_state.kmeans_done = False
+                        # Hide plots from previous runs
+                        st.session_state.show_pca_scree = False
+                        st.session_state.show_dendrogram = False
+                        st.session_state.show_tsne_plot = False
+                        st.session_state.show_kmeans_plot = False
+
+                        st.success(f"Outlier detection complete. Removed {n_outliers_found} potential outliers ({n_outliers_found / len(data_to_scan):.2%}).")
+                        st.write("Shape after outlier removal:", st.session_state.data_no_outliers.shape)
+                        st.dataframe(st.session_state.data_no_outliers.head())
+
+                    except Exception as e:
+                        st.error(f"Error during Isolation Forest: {e}")
+                        st.session_state.outliers_removed = False
+                else:
+                    st.warning("Prepared data not found. Run Step 1 first.")
+        else:
+            st.info("Prepare data (Step 1) first.")
+        st.markdown("---") # Separator after step
+
+        # --- Step 3: Scaling and PCA ---
+        st.subheader("Step 3: Scale Data and Run PCA")
+        if st.session_state.get('outliers_removed', False):
+            if st.button("Run Scaling and PCA", key="run_pca_btn"):
+                if st.session_state.data_no_outliers is not None:
+                    try:
+                        data_to_scale = st.session_state.data_no_outliers.copy()
+                        numerical_cols = data_to_scale.select_dtypes(include=np.number).columns.tolist()
+                        st.write(f"Scaling numerical columns...") # : {', '.join(numerical_cols)}
+
+                        scaler = StandardScaler()
+                        scaled_data_array = scaler.fit_transform(data_to_scale[numerical_cols])
+                        st.session_state.scaled_data = pd.DataFrame(scaled_data_array, columns=numerical_cols, index=data_to_scale.index)
+
+                        st.write("Running PCA on scaled data...")
+                        pca = PCA(random_state=42)
+                        pca.fit(st.session_state.scaled_data)
+                        st.session_state.pca_model = pca
+                        st.session_state.pca_data = pca.transform(st.session_state.scaled_data)
+
+                        st.session_state.pca_scree_fig = plot_pca_scree_plot(st.session_state.scaled_data)
+                        st.session_state.pca_done = True
+                        st.session_state.show_pca_scree = True # Set flag to show immediately
+                         # Reset downstream steps
+                        st.session_state.tsne_done = False
+                        st.session_state.hierarchical_done = False
+                        st.session_state.kmeans_done = False
+                        # Hide plots from previous downstream runs
+                        st.session_state.show_dendrogram = False
+                        st.session_state.show_tsne_plot = False
+                        st.session_state.show_kmeans_plot = False
+
+                        st.success("Scaling and PCA complete.")
+                        # Optionally show PCA results head: st.dataframe(pd.DataFrame(st.session_state.pca_data).head())
+
+                    except Exception as e:
+                        st.error(f"Error during Scaling/PCA: {e}")
+                        st.session_state.pca_done = False
+                        st.session_state.show_pca_scree = False # Ensure flag is false on error
+                else:
+                    st.warning("Outlier-free data not found. Run Step 2 first.")
+
+            # Display Area for PCA Scree Plot (within Step 3)
+            if st.session_state.get('show_pca_scree', False):
+                st.markdown("#### PCA Scree Plot")
+                if st.session_state.pca_scree_fig:
+                    st.pyplot(st.session_state.pca_scree_fig, use_container_width=False)
+                    if st.button("Hide PCA Scree Plot", key="hide_pca_btn_inline"):
+                        st.session_state.show_pca_scree = False
+                        st.rerun()
+                else:
+                    # This case means the button was clicked, flag is true, but fig is None (error happened)
+                    st.warning("Could not generate PCA Scree Plot.")
+                    st.session_state.show_pca_scree = False # Reset flag
+
+        else:
+            st.info("Remove outliers (Step 2) first.")
+        st.markdown("---") # Separator after step
+
+        # --- Step 4: Hierarchical Clustering (Dendrogram & Cluster Selection) ---
+        st.subheader("Step 4: Hierarchical Clustering (Dendrogram & Cluster Selection)")
+        if st.session_state.get('pca_done', False):
+             if st.session_state.pca_data is not None:
+                 max_pca_components = st.session_state.pca_data.shape[1]
+                 default_hier_comps = min(10, max_pca_components)
+                 n_components_for_clustering = st.slider("Number of PCA Components for Hierarchical Clustering", 2, max_pca_components, default_hier_comps, 1, key="pca_comps_hierarchical_slider_v2") # Changed key
+
+                 # --- Calculate Linkage ---
+                 recalculate_linkage = st.button("Recalculate Linkage Matrix", key="recalc_linkage_btn_v3") # Changed key
+                 if recalculate_linkage or 'linkage_matrix' not in st.session_state or st.session_state.linkage_matrix is None:
+                     # ... (keep the linkage calculation logic exactly as it was in the previous version) ...
+                     try:
+                         st.write(f"Performing Ward linkage on first {n_components_for_clustering} PCA components...")
+                         pca_data_subset_link = st.session_state.pca_data[:, :n_components_for_clustering]
+                         st.session_state.linkage_matrix = linkage(pca_data_subset_link, method='ward')
+                         distances = st.session_state.linkage_matrix[:, 2]
+                         diffs = np.diff(distances)
+                         idx_largest_diff = np.argmax(diffs) if len(diffs) > 0 else 0
+                         st.session_state.optimal_y_value = distances[idx_largest_diff] if len(distances) > idx_largest_diff else (distances[-1] if len(distances) > 0 else 0)
+                         st.write("Linkage matrix calculated.")
+                         st.session_state.hierarchical_done = False
+                         st.session_state.show_dendrogram = False
+                         st.session_state.hierarchical_silhouette = None
+                         st.session_state.hierarchical_n_clusters = None
+                         st.session_state.show_hierarchical_tsne_plot = False
+                         st.session_state.hierarchical_labels_for_tsne = None
+                     except Exception as e:
+                         st.error(f"Error calculating linkage matrix: {e}")
+                         st.session_state.linkage_matrix = None
+                         st.session_state.optimal_y_value = None
+
+                 # --- Display Dendrogram & Select k ---
+                 if st.session_state.get('linkage_matrix') is not None:
+                     st.markdown("#### Dendrogram (with suggested distance cut)")
+                     optimal_y = st.session_state.get('optimal_y_value', 0)
+                     fig_dendro = plot_dendrogram(st.session_state.linkage_matrix, optimal_y)
+                     st.pyplot(fig_dendro, use_container_width=False)
+                     st.caption(f"Red line shows cut based on largest distance jump (Distance ≈ {optimal_y:.2f}). Use this or visual inspection to choose k below.")
+                     st.session_state.show_dendrogram = True
+
+                     default_k_hier = st.session_state.get('hierarchical_n_clusters', 3)
+                     st.session_state.hierarchical_n_clusters = st.number_input(
+                         "Select Desired Number of Clusters (k) for Hierarchical",
+                         min_value=2, max_value=20, value=default_k_hier, step=1,
+                         key="hierarchical_k_selector_input_v2" # Changed key
+                     )
+
+                     # --- Assign Clusters & Calculate Score ---
+                     if st.button(f"Assign Clusters & Calculate Score (k={st.session_state.hierarchical_n_clusters})", key="run_hierarchical_fcluster_exec_btn_v2"): # Changed key
+                         st.session_state.hierarchical_done = False
+                         st.session_state.show_hierarchical_tsne_plot = False # Reset plot display status
+                         st.session_state.hierarchical_labels_for_tsne = None # Reset labels
+                         try:
+                             current_k_hierarchical = st.session_state.hierarchical_n_clusters
+                             st.write(f"Assigning {current_k_hierarchical} clusters using 'maxclust' criterion...")
+                             cluster_labels_hierarchical = fcluster(st.session_state.linkage_matrix, t=current_k_hierarchical, criterion='maxclust')
+                             st.session_state.hierarchical_labels_for_tsne = cluster_labels_hierarchical # Store labels
+
+                             # Calculate Silhouette Score using the same PCA subset used for linkage
+                             pca_data_subset_score = st.session_state.pca_data[:, :n_components_for_clustering]
+                             if current_k_hierarchical > 1 and len(pca_data_subset_score) >= current_k_hierarchical :
+                                 try:
+                                    score = silhouette_score(pca_data_subset_score, cluster_labels_hierarchical, metric='euclidean')
+                                    st.session_state.hierarchical_silhouette = score
+                                    st.session_state.hierarchical_done = True # Mark as done only after successful scoring attempt
+                                    st.success(f"Clusters assigned & Silhouette Score calculated for k={current_k_hierarchical}.")
+                                 except ValueError as sil_err:
+                                     st.warning(f"Could not calculate silhouette score: {sil_err}")
+                                     st.session_state.hierarchical_silhouette = None
+                                     st.session_state.hierarchical_done = False # Mark as not done if score fails
+                             else:
+                                 st.warning(f"Silhouette score requires k > 1 and Samples >= k.")
+                                 st.session_state.hierarchical_silhouette = None
+                                 st.session_state.hierarchical_done = False # Mark as not done if score not calculated
+
+                             # DO NOT generate t-SNE plot here automatically anymore
+
+                         except Exception as e:
+                             st.error(f"Error assigning clusters or calculating score: {e}")
+                             st.session_state.hierarchical_done = False
+                             st.session_state.hierarchical_silhouette = None
+                             st.session_state.hierarchical_labels_for_tsne = None
+
+                     # --- Display Silhouette Score ---
+                     if st.session_state.get('hierarchical_done'): # Only show if assignment/scoring succeeded for the current k
+                         k_hier_for_score = st.session_state.hierarchical_n_clusters # Use k selected when score was calc'd
+                         if st.session_state.get('hierarchical_silhouette') is not None:
+                             st.metric(label=f"Silhouette Score (Hierarchical, k={k_hier_for_score})",
+                                       value=f"{st.session_state.hierarchical_silhouette:.3f}")
+
+                     st.markdown("---") # Separator
+
+                     # --- Button to Show Hierarchical Clusters on t-SNE ---
+                     st.markdown("#### Visualize Hierarchical Clusters on t-SNE")
+                     # Enable button only if clusters are assigned AND t-SNE is done
+                     can_show_hier_tsne = st.session_state.get('hierarchical_done', False) and \
+                                          st.session_state.get('tsne_done', False) and \
+                                          st.session_state.get('tsne_data') is not None and \
+                                          st.session_state.get('hierarchical_labels_for_tsne') is not None
+
+                     if not st.session_state.get('tsne_done', False):
+                         st.info("Run t-SNE (Step 5) first to enable this visualization.")
+                     elif not st.session_state.get('hierarchical_done', False):
+                         st.info("Assign Hierarchical Clusters (using the button above) first to enable this visualization.")
+
+                     if st.button("Show Plot", key="show_hier_tsne_plot_btn", disabled=not can_show_hier_tsne):
+                         try:
+                             st.write("Generating t-SNE plot colored by hierarchical clusters...")
+                             current_k_hier = st.session_state.hierarchical_n_clusters # k used for labels
+                             st.session_state.hierarchical_tsne_fig = plot_hierarchical_on_tsne(
+                                 st.session_state.tsne_data,
+                                 st.session_state.hierarchical_labels_for_tsne,
+                                 current_k_hier
+                             )
+                             st.session_state.show_hierarchical_tsne_plot = True # Show plot now
+                         except Exception as e:
+                             st.error(f"Failed to generate hierarchical t-SNE plot: {e}")
+                             st.session_state.show_hierarchical_tsne_plot = False
+
+                     # --- Display Hierarchical Clusters on t-SNE Plot ---
+                     if st.session_state.get('show_hierarchical_tsne_plot', False):
+                          if st.session_state.hierarchical_tsne_fig:
+                              st.pyplot(st.session_state.hierarchical_tsne_fig, use_container_width=False)
+                              if st.button("Hide Hierarchical t-SNE Plot", key="hide_hier_tsne_btn_v2"): # Changed key
+                                   st.session_state.show_hierarchical_tsne_plot = False
+                                   st.rerun()
+                          else:
+                              st.warning("Could not generate hierarchical t-SNE plot.")
+                              st.session_state.show_hierarchical_tsne_plot = False
+
+                 else: # Linkage matrix not calculated
+                     st.info("Calculate Linkage Matrix first using the button above.")
+
+             else: # PCA data not available
+                 st.warning("PCA results (Step 3) not found.")
+        else: # PCA not done
+             st.info("Run PCA (Step 3) first.")
+        st.markdown("---") # Separator after step
+
+
+        # --- Step 5: t-SNE Visualization ---
+        st.subheader("Step 5: t-SNE Visualization")
+        if st.session_state.get('pca_done', False):
+             if st.session_state.pca_data is not None:
+                 max_pca_components_tsne = st.session_state.pca_data.shape[1]
+                 # Default to more components for t-SNE usually
+                 default_tsne_comps = min(30, max_pca_components_tsne)
+                 n_components_for_tsne = st.slider("Number of PCA Components for t-SNE", 2, max_pca_components_tsne, default_tsne_comps, 1, key="pca_comps_tsne")
+                 pca_data_subset_tsne = st.session_state.pca_data[:, :n_components_for_tsne]
+
+                 perplexity_value = st.slider("t-SNE Perplexity.\nHigher perplexity values emphasize broader structures, while lower values prioritize local relationships. Higher perplexity, higher computational time and memory usage.\nVisit: https://scikit-learn.org/stable/auto_examples/manifold/plot_t_sne_perplexity.html", 5, 50, 30, 1, key="tsne_perplexity")
+                 n_iter_value = st.select_slider("t-SNE Iterations", options=[250, 500, 1000, 2000], value=1000, key="tsne_iter")
+
+                 if st.button("Run t-SNE", key="run_tsne_btn"):
+                     try:
+                         st.write(f"Running t-SNE on first {n_components_for_tsne} PCA components (Perplexity={perplexity_value}, Iterations={n_iter_value})... This may take a moment.")
+                         tsne = TSNE(n_components=2,
+                                     perplexity=perplexity_value,
+                                     n_iter=n_iter_value,
+                                     random_state=42,
+                                     n_jobs=-1)
+                         st.session_state.tsne_data = tsne.fit_transform(pca_data_subset_tsne)
+                         st.session_state.tsne_plot_fig = plot_tsne(st.session_state.tsne_data)
+                         st.session_state.tsne_done = True
+                         st.session_state.show_tsne_plot = True # Show immediately
+                          # Reset K-Means if t-SNE is re-run
+                         st.session_state.kmeans_done = False
+                         st.session_state.show_kmeans_plot = False
+                         st.success("t-SNE calculation complete.")
+
+                     except Exception as e:
+                         st.error(f"Error during t-SNE: {e}")
+                         st.session_state.tsne_done = False
+                         st.session_state.show_tsne_plot = False # Ensure flag is false on error
+
+                 # Display Area for t-SNE Plot (within Step 5)
+                 if st.session_state.get('show_tsne_plot', False):
+                     st.markdown("#### t-SNE Plot")
+                     if st.session_state.tsne_plot_fig:
+                         st.pyplot(st.session_state.tsne_plot_fig, use_container_width=False)
+                         if st.button("Hide t-SNE Plot", key="hide_tsne_btn_inline"):
+                             st.session_state.show_tsne_plot = False
+                             st.rerun()
+                     else:
+                         st.warning("Could not generate t-SNE plot.")
+                         st.session_state.show_tsne_plot = False # Reset flag
+             else:
+                 st.warning("PCA results not found.")
+        else:
+            st.info("Run PCA (Step 3) first.")
+        st.markdown("---") # Separator after step
+
+
+                # --- Step 6: K-Means Clustering (on t-SNE results) ---
+        st.subheader("Step 6: K-Means Clustering (on t-SNE results)")
+        if st.session_state.get('tsne_done', False):
+            if st.session_state.tsne_data is not None:
+                 st.session_state.n_clusters = st.number_input("Select Number of Clusters (k)", min_value=2, max_value=20, value=st.session_state.get('n_clusters', 5), step=1, key="kmeans_k_selector")
+
+                 if st.button(f"Run K-Means (k={st.session_state.n_clusters})", key="run_kmeans_btn"):
+                     try:
+                         current_k = st.session_state.n_clusters
+                         st.write(f"Running K-Means with k={current_k} on t-SNE results...")
+                         kmeans = KMeans(n_clusters=current_k,
+                                         random_state=42,
+                                         n_init='auto')
+                         labels = kmeans.fit_predict(st.session_state.tsne_data)
+                         st.session_state.kmeans_labels = labels
+
+                         # --- Calculate Silhouette Score ---
+                         if current_k > 1 and len(st.session_state.tsne_data) > current_k: # Check if calculation is possible
+                             try:
+                                score = silhouette_score(st.session_state.tsne_data, labels, metric='euclidean')
+                                st.session_state.kmeans_silhouette = score
+                                st.write(f"Calculated Silhouette Score.")
+                             except ValueError as sil_err:
+                                 st.warning(f"Could not calculate silhouette score: {sil_err}")
+                                 st.session_state.kmeans_silhouette = None
+                         else:
+                             st.warning(f"Silhouette score requires at least 2 clusters and more samples than clusters.")
+                             st.session_state.kmeans_silhouette = None
+                         # --- End Silhouette Calculation ---
+
+                         st.session_state.kmeans_plot_fig = plot_kmeans_clusters(st.session_state.tsne_data, labels, current_k)
+                         st.session_state.kmeans_done = True
+                         st.session_state.show_kmeans_plot = True
+                         st.success("K-Means clustering complete.")
+
+                     except Exception as e:
+                         st.error(f"Error during K-Means: {e}")
+                         st.session_state.kmeans_done = False
+                         st.session_state.show_kmeans_plot = False
+                         st.session_state.kmeans_silhouette = None # Clear score on error
+
+                 # Display Area for K-Means Plot and Score (within Step 6)
+                 if st.session_state.get('show_kmeans_plot', False):
+                     k_used_for_plot = len(np.unique(st.session_state.kmeans_labels)) if st.session_state.kmeans_labels is not None else st.session_state.n_clusters
+                     st.markdown(f"#### K-Means Clustering Plot (k={k_used_for_plot})")
+                     if st.session_state.kmeans_plot_fig:
+                         st.pyplot(st.session_state.kmeans_plot_fig, use_container_width=False)
+                         # Display silhouette score if available
+                         if st.session_state.get('kmeans_silhouette') is not None:
+                              st.metric(label=f"Silhouette Score (k={k_used_for_plot})",
+                                        value=f"{st.session_state.kmeans_silhouette:.3f}")
+
+                         if st.button("Hide K-Means Plot", key="hide_kmeans_btn_inline"):
+                             st.session_state.show_kmeans_plot = False
+                             st.session_state.kmeans_silhouette = None # Hide score when hiding plot
+                             st.rerun()
+                     else:
+                         st.warning("Could not generate K-Means plot.")
+                         st.session_state.show_kmeans_plot = False
+                         st.session_state.kmeans_silhouette = None
+
+            else:
+                 st.warning("t-SNE results not found.")
+        else:
+             st.info("Run t-SNE (Step 5) first.")
+        # No final separator needed here as it's the end of the expander
+    
+
+
+    
+    # ==================================================
+    # Section: Supervised Learning - Predicting Campaign Acceptance (XGBoost)
+    # ==================================================
+    st.markdown("---")
+    st.header("Supervised Learning: Predict Campaign Acceptance (XGBoost)")
+    with st.expander("Show XGBoost Regression Steps", expanded=True):
+
+        st.markdown("""
+        Predict `NumAcceptedCmps` (total accepted campaigns) using XGBoost Regression.
+        *(Uses the data prepared for modeling, **before** outlier removal)*
+        """)
+
+        # Define campaign flags list here - BEFORE any steps use it
+        original_campaign_flags = ['AcceptedCmp1', 'AcceptedCmp2', 'AcceptedCmp3', 'AcceptedCmp4', 'AcceptedCmp5', 'Response']
+        target_col = 'NumAcceptedCmps' # Define target col name
+
+        # --- Step 1: Verify Data and Target ---
+        st.subheader("Step 1: Verify Data and Target Variable")
+
+        can_proceed_xgb = False
+        model_data_xgb = None
+
+        # We specifically want the data BEFORE outlier removal for this model
+        if st.session_state.get('data_prepared_for_modeling') is None:
+            st.warning("Please run 'Prepare Data for Modeling' (Step 1 in the Clustering section) first.")
+        else:
+            model_data_xgb = st.session_state.data_prepared_for_modeling.copy()
+            st.info(f"Using 'Prepared Data (with potential outliers)'. Shape: {model_data_xgb.shape}")
+
+            # --- Check/Calculate Target Variable ---
+            if target_col not in model_data_xgb.columns:
+                st.warning(f"'{target_col}' not found, attempting recalculation...")
+                if all(c in st.session_state.data.columns for c in original_campaign_flags):
+                    original_data_indices = model_data_xgb.index
+                    if st.session_state.data is not None and all(idx in st.session_state.data.index for idx in original_data_indices):
+                        try:
+                            model_data_xgb[target_col] = st.session_state.data.loc[original_data_indices, original_campaign_flags].sum(axis=1)
+                            st.info(f"Successfully recalculated '{target_col}'.")
+                        except Exception as e_calc:
+                             st.error(f"Error during target recalculation: {e_calc}")
+                             model_data_xgb = None # Prevent proceeding on error
+                    else:
+                        st.error(f"Cannot recalculate target: Original data missing or indices mismatch.")
+                        model_data_xgb = None
+                else:
+                    st.error(f"Cannot recalculate target: Required campaign flags missing in original data.")
+                    model_data_xgb = None
+            else:
+                st.success(f"Target column '{target_col}' found.")
+
+            # --- Proceed only if model_data_xgb and target column exist ---
+            if model_data_xgb is not None and target_col in model_data_xgb.columns:
+                can_proceed_xgb = True
+                y_xgb = model_data_xgb[target_col] # Define y_xgb here
+
+                # --- Display Target Histogram ---
+                st.markdown("#### Target Variable Distribution (`NumAcceptedCmps`)")
+                if st.checkbox("Show/Hide Histogram", value=st.session_state.get('show_numacceptedcmps_hist_xgb', False), key="toggle_nac_hist_xgb"):
+                    st.session_state.show_numacceptedcmps_hist_xgb = True
+                    try:
+                        if 'plot_count_histogram' in globals() and y_xgb is not None:
+                            # st.session_state.numacceptedcmps_hist_fig = plot_histogram(model_data_xgb[[target_col]], title=f"Histogram of {target_col}")
+                            st.session_state.numacceptedcmps_hist_fig = plot_bar_chart(model_data_xgb[[target_col]])
+                            st.pyplot(st.session_state.numacceptedcmps_hist_fig, use_container_width=False)
+                        else: st.warning("Plotting function or data unavailable.")
+                    except Exception as e_hist:
+                        st.warning(f"Could not generate histogram: {e_hist}")
+                        st.session_state.show_numacceptedcmps_hist_xgb = False
+                else:
+                    st.session_state.show_numacceptedcmps_hist_xgb = False
+            else:
+                st.error("Cannot proceed without valid source data and target column.")
+                can_proceed_xgb = False
+
+        st.markdown("---") # Separator
+
+        # --- Step 2: Train and Evaluate XGBoost ---
+        st.subheader("Step 2: Train & Evaluate XGBoost Model")
+        if can_proceed_xgb:
+            test_size_xgb = st.slider("Select Test Set Size:", 0.1, 0.5, 0.20, 0.05, key="xgb_test_size_slider")
+            n_estimators_xgb = st.slider("Number of Estimators (Trees):", 50, 500, 100, 50, key="xgb_n_estimators")
+            max_depth_xgb = st.slider("Max Tree Depth:", 3, 10, 5, 1, key="xgb_max_depth")
+            learning_rate_xgb = st.select_slider("Learning Rate:", options=[0.01, 0.05, 0.1, 0.2, 0.3], value=0.1, key="xgb_learning_rate")
+
+            if st.button("Train XGBoost Model and Evaluate", key="train_xgb_model_exec_btn"):
+                st.session_state.xgb_model_trained_success = False # Reset success flag
+                try:
+                    # Re-fetch data and target INSIDE button press logic for safety
+                    model_data_train_xgb = st.session_state.data_prepared_for_modeling.copy()
+
+                    # Ensure target exists again
+                    if target_col not in model_data_train_xgb.columns:
+                        original_data_indices_train = model_data_train_xgb.index
+                        if all(c in st.session_state.data.columns for c in original_campaign_flags):
+                             if st.session_state.data is not None and all(idx in st.session_state.data.index for idx in original_data_indices_train):
+                                model_data_train_xgb[target_col] = st.session_state.data.loc[original_data_indices_train, original_campaign_flags].sum(axis=1)
+                             else: raise ValueError("Original data missing or index mismatch for target recalc.")
+                        else: raise ValueError(f"Target column '{target_col}' missing and cannot be recalculated.")
+
+                    y_train_eval_xgb = model_data_train_xgb[target_col]
+                    # Select only numeric features for XGBoost, exclude target
+                    X_train_eval_xgb = model_data_train_xgb.select_dtypes(include=np.number).drop(columns=[target_col], errors='ignore')
+
+                    # Drop original campaign flags if they accidentally remain as numeric features
+                    cols_to_drop_train = [c for c in original_campaign_flags if c in X_train_eval_xgb.columns]
+                    if cols_to_drop_train:
+                        st.write(f"Removing original campaign flags from features: {', '.join(cols_to_drop_train)}")
+                        X_train_eval_xgb = X_train_eval_xgb.drop(columns=cols_to_drop_train)
+
+                    # No need to add constant for XGBoost
+
+                    X_train_s, X_test_s, y_train_s, y_test_s = train_test_split(
+                        X_train_eval_xgb, y_train_eval_xgb, test_size=test_size_xgb, random_state=42
+                    )
+                    st.session_state.xgb_y_test = y_test_s # Store actual test values
+
+                    st.write(f"Training Shape: {X_train_s.shape}, Test Shape: {X_test_s.shape}")
+
+                    # --- Instantiate and Fit XGBoost Model ---
+                    st.write(f"Fitting XGBoost Regressor...")
+                    xgb_model = xgb.XGBRegressor(
+                        objective='count:poisson', # Suitable objective for count data
+                        n_estimators=n_estimators_xgb,
+                        learning_rate=learning_rate_xgb,
+                        max_depth=max_depth_xgb,
+                        random_state=42,
+                        n_jobs=-1,
+                        early_stopping_rounds=10, # Stop if validation metric doesn't improve
+                        eval_metric='rmse'       # Metric to monitor for early stopping
+                    )
+
+                    eval_set = [(X_test_s, y_test_s)] # Use test set for early stopping validation
+
+                    xgb_model.fit(X_train_s, y_train_s, eval_set=eval_set, verbose=False) # verbose=False prevents printing iterations
+
+                    st.session_state.xgb_model_fitted = xgb_model # Store the fitted model object
+                    st.success("Model fitting complete.")
+
+                    # --- Predict and Evaluate ---
+                    st.write("Predicting on test set...")
+                    predictions_float = st.session_state.xgb_model_fitted.predict(X_test_s)
+                    # Round predictions for count comparison metrics
+                    st.session_state.xgb_predictions = np.round(predictions_float).astype(int)
+                    # Ensure predictions are not negative (common in regression for counts)
+                    st.session_state.xgb_predictions[st.session_state.xgb_predictions < 0] = 0
+
+
+                    st.session_state.xgb_mae = mean_absolute_error(y_test_s, st.session_state.xgb_predictions)
+                    mse = mean_squared_error(y_test_s, st.session_state.xgb_predictions)
+                    st.session_state.xgb_rmse = np.sqrt(mse)
+
+                    # Calculate baseline AFTER y_train_s is defined
+                    baseline_prediction = np.full_like(y_test_s, fill_value=y_train_s.mean())
+                    st.session_state.xgb_baseline_mae = mean_absolute_error(y_test_s, baseline_prediction)
+                    baseline_mse = mean_squared_error(y_test_s, baseline_prediction)
+                    st.session_state.xgb_baseline_rmse = np.sqrt(baseline_mse)
+
+                    # Generate plot only if predictions and actuals are valid
+                    if st.session_state.xgb_predictions is not None and y_test_s is not None:
+                        st.session_state.xgb_plot_fig = plot_actual_vs_predicted(y_test_s, st.session_state.xgb_predictions, title="XGBoost - Actual vs. Predicted")
+                    else:
+                        st.session_state.xgb_plot_fig = None
+
+                    # Generate Feature Importance Plot
+                    try:
+                        importances = st.session_state.xgb_model_fitted.feature_importances_
+                        feature_names = X_train_s.columns
+                        importance_df = pd.DataFrame({'Feature': feature_names, 'Importance': importances}).sort_values(by='Importance', ascending=False)
+
+                        fig_imp, ax_imp = plt.subplots(figsize=(5, max(2, len(feature_names) * 0.1))) # Adjust height
+                        sns.barplot(x='Importance', y='Feature', data=importance_df.head(20), ax=ax_imp) # Show top 20
+                        ax_imp.set_title('XGBoost Feature Importance (Top 20)')
+                        plt.tight_layout()
+                        st.session_state.xgb_feature_importances_fig = fig_imp
+                    except Exception as imp_e:
+                        st.warning(f"Could not generate feature importance plot: {imp_e}")
+                        st.session_state.xgb_feature_importances_fig = None
+
+
+                    st.session_state.xgb_model_trained_success = True # Set success flag HERE
+                    st.info("Evaluation complete. Results displayed below.")
+
+                except ValueError as ve:
+                     st.error(f"Data Error during split/train: {ve}")
+                     st.session_state.xgb_model_trained_success = False
+                except Exception as e:
+                     st.error(f"An error occurred during training/evaluation: {e}")
+                     st.session_state.xgb_model_trained_success = False
+
+        else: # can_proceed_xgb is False
+            st.info("Complete Step 1 above (verify data and target) to enable training.")
+
+        st.markdown("---") # Separator
+
+        # --- Step 3: Display Results ---
+        st.subheader("Step 3: Results")
+        if st.session_state.get('xgb_model_trained_success', False):
+            st.markdown("#### Model Performance Metrics (on Test Set)")
+            # ... (keep metric display logic as before) ...
+            col_m1_xgb, col_m2_xgb = st.columns(2)
+            with col_m1_xgb:
+                if st.session_state.get('xgb_mae') is not None:
+                    st.metric("XGBoost MAE", f"{st.session_state.xgb_mae:.3f}")
+                if st.session_state.get('xgb_baseline_mae') is not None:
+                    st.metric("Baseline (Mean) MAE", f"{st.session_state.xgb_baseline_mae:.3f}")
+            with col_m2_xgb:
+                if st.session_state.get('xgb_rmse') is not None:
+                     st.metric("XGBoost RMSE", f"{st.session_state.xgb_rmse:.3f}")
+                if st.session_state.get('xgb_baseline_rmse') is not None:
+                    st.metric("Baseline (Mean) RMSE", f"{st.session_state.xgb_baseline_rmse:.3f}")
+
+            if all(k in st.session_state and st.session_state[k] is not None for k in ['xgb_baseline_mae', 'xgb_mae', 'xgb_baseline_rmse', 'xgb_rmse']):
+                 delta_mae_xgb = st.session_state.xgb_baseline_mae - st.session_state.xgb_mae
+                 delta_rmse_xgb = st.session_state.xgb_baseline_rmse - st.session_state.xgb_rmse
+                 st.write(f"**Improvement over Baseline:** MAE reduced by {delta_mae_xgb:.3f}, RMSE reduced by {delta_rmse_xgb:.3f}")
+                 st.caption("Lower MAE/RMSE is better. Positive improvement indicates the XGBoost model performed better than the simple mean.")
+            else:
+                 st.caption("Baseline or model metrics missing, cannot calculate improvement.")
+
+
+            # --- Display Plots Side-by-Side ---
+            st.markdown("---") # Separator before plots
+            st.markdown("#### Visualizations (Test Set)")
+            plot_col1, plot_col2 = st.columns(2)
+
+            with plot_col1:
+                st.markdown("###### Actual vs. Predicted")
+                if st.session_state.get('xgb_plot_fig'):
+                    # Pass use_container_width=False here
+                    st.pyplot(st.session_state.xgb_plot_fig, use_container_width=False)
+                else:
+                    st.warning("Actual vs Predicted plot not available.")
+
+            with plot_col2:
+                st.markdown("###### Feature Importances")
+                if st.session_state.get('xgb_feature_importances_fig'):
+                    # Pass use_container_width=False here
+                    st.pyplot(st.session_state.xgb_feature_importances_fig, use_container_width=False)
+                else:
+                    st.warning("Feature importance plot not available.")
+            # --- End Side-by-Side Display ---
+
+
+            if st.button("Hide Results", key="hide_xgb_results_btn"):
+                st.session_state.xgb_model_trained_success = False # Hide results section
+                st.session_state.xgb_feature_importances_fig = None # Clear figure
+                st.session_state.xgb_plot_fig = None # Clear figure
+                st.rerun()
+        else:
+            st.info("Train and evaluate the XGBoost model first to see results.")
+
+    # ==================================================
+    # Section: Business Insights from Clustering (Multi-Level)
+    # ==================================================
+    st.markdown("---")
+    st.header("Business Insights from Clustering")
+    with st.expander("Show Cluster Profiles and Campaign Strategies", expanded=True):
+
+        st.markdown("""
+        Explore cluster profiles at two levels:
+        - **Broad Insights:** Focus on key aggregate metrics (Recency, Frequency, Monetary, Campaign Acceptance).
+        - **Detailed Insights:** Dive into the components of spending, purchase channels, and campaign responses, along with core metrics. Select columns to display.
+        *(Requires Clustering steps and XGBoost training to be completed)*
+        """)
+
+        # --- Prerequisite Checks ---
+        base_data_exists = 'data_copy_engineered' in st.session_state and st.session_state.data_copy_engineered is not None
+        hier_labels_exist = base_data_exists and st.session_state.get('hierarchical_done', False) and st.session_state.get('hierarchical_labels_for_tsne') is not None
+        kmeans_labels_exist = base_data_exists and st.session_state.get('kmeans_done', False) and st.session_state.get('kmeans_labels') is not None
+        xgb_trained = st.session_state.get('xgb_model_trained_success', False)
+        feature_importance_df = None # Initialize
+
+        if not base_data_exists:
+            st.warning("Run 'Feature Engineering' first to provide base data.")
+        if not hier_labels_exist and not kmeans_labels_exist:
+            st.warning("Run 'Hierarchical Clustering' or 'K-Means Clustering' first.")
+        if not xgb_trained:
+            st.info("Train the 'XGBoost Model' to enable campaign suggestions based on feature importance.")
+
+        # --- Define Column Groups ---
+        # Attempt to get Age column
+        age_col_insight = None
+        if base_data_exists:
+            if 'Age_On_Last_Enrollment_Date' not in st.session_state.data_copy_engineered.columns:
+                # Try to calculate it silently here if needed, maybe add a note if successful/failed
+                try:
+                    data_eng_temp = st.session_state.data_copy_engineered.copy()
+                    data_eng_temp['Dt_Customer'] = pd.to_datetime(data_eng_temp['Dt_Customer'], errors='coerce')
+                    data_eng_temp['Year_Birth'] = pd.to_numeric(data_eng_temp['Year_Birth'], errors='coerce')
+                    data_eng_temp.dropna(subset=['Dt_Customer', 'Year_Birth'], inplace=True)
+                    latest_enrollment_date_insight = data_eng_temp['Dt_Customer'].max()
+                    data_eng_temp['Age_On_Last_Enrollment_Date'] = latest_enrollment_date_insight.year - data_eng_temp['Year_Birth']
+                    st.session_state.data_copy_engineered = data_eng_temp # Update state
+                    age_col_insight = 'Age_On_Last_Enrollment_Date'
+                    # st.caption("Successfully calculated 'Age_On_Last_Enrollment_Date' for insights.") # Optional user feedback
+                except Exception:
+                    st.caption("Note: Could not calculate 'Age_On_Last_Enrollment_Date', age insights unavailable.")
+                    age_col_insight = None
+            else:
+                age_col_insight = 'Age_On_Last_Enrollment_Date'
+
+        # Core metrics (always include if available)
+        core_cols = [col for col in [age_col_insight, 'Income', 'Recency'] if col is not None]
+        # Aggregate metrics for Broad view
+        broad_agg_cols = ['Frequency', 'Monetary', 'NumAcceptedCmps']
+        # Component metrics for Detailed view
+        freq_components = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
+        monetary_components = ['MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds']
+        campaign_components = ['AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response']
+
+        # All potential columns for detailed view selector
+        all_detailed_cols = core_cols + broad_agg_cols + freq_components + monetary_components + campaign_components
+
+        # --- Helper function for Aggregation ---
+        def get_cluster_summary(data_with_labels, cluster_col_name, columns_to_agg):
+            """Aggregates specified columns for cluster profiling."""
+            agg_dict_named = {}
+            valid_columns = [col for col in columns_to_agg if col in data_with_labels.columns] # Ensure columns exist
+
+            for col in valid_columns:
+                # Use median for potentially skewed core metrics, mean for others
+                agg_func = 'median' if col in core_cols else 'mean'
+                agg_dict_named[col] = pd.NamedAgg(column=col, aggfunc=agg_func)
+
+            # Add Size
+            agg_dict_named['Size'] = pd.NamedAgg(column=cluster_col_name, aggfunc='size')
+
+            if not agg_dict_named: # Handle case where no valid columns are found
+                return pd.DataFrame()
+
+            try:
+                summary_df = data_with_labels.groupby(cluster_col_name).agg(**agg_dict_named)
+                return summary_df
+            except Exception as agg_e:
+                st.error(f"Error during aggregation for {cluster_col_name}: {agg_e}")
+                return pd.DataFrame() # Return empty DF on error
+
+        # --- Prepare Data & Fetch Importance (Run once if possible) ---
+        data_hier_insights = None
+        data_kmeans_insights = None
+        index_source_df = None
+
+        if base_data_exists:
+            # Determine source index (post-outlier or pre-outlier)
+            if st.session_state.get('outliers_removed', False) and 'data_no_outliers' in st.session_state and st.session_state.data_no_outliers is not None:
+                index_source_df = st.session_state.data_no_outliers
+                index_source_caption = "using index from data *after* outlier removal."
+            elif 'data_prepared_for_modeling' in st.session_state and st.session_state.data_prepared_for_modeling is not None:
+                index_source_df = st.session_state.data_prepared_for_modeling
+                index_source_caption = "using index from data *before* outlier removal (but after preparation)."
+            else:
+                st.warning("Could not identify source data index for mapping cluster labels.")
+
+            if index_source_df is not None:
+                # Prepare Hierarchical data
+                if hier_labels_exist and len(st.session_state.hierarchical_labels_for_tsne) == len(index_source_df):
+                    data_hier_insights = st.session_state.data_copy_engineered.loc[index_source_df.index].copy()
+                    data_hier_insights['Hierarchical_Cluster'] = st.session_state.hierarchical_labels_for_tsne
+                elif hier_labels_exist:
+                    st.warning("Mismatch between Hierarchical labels and source index length.")
+
+                # Prepare K-Means data
+                if kmeans_labels_exist and len(st.session_state.kmeans_labels) == len(index_source_df):
+                    data_kmeans_insights = st.session_state.data_copy_engineered.loc[index_source_df.index].copy()
+                    data_kmeans_insights['KMeans_Cluster'] = st.session_state.kmeans_labels
+                elif kmeans_labels_exist:
+                    st.warning("Mismatch between K-Means labels and source index length.")
+
+            # Fetch Feature Importance
+            if xgb_trained and st.session_state.get('xgb_model_fitted') is not None:
+                try:
+                    model_xgb = st.session_state.xgb_model_fitted
+                    importances = model_xgb.feature_importances_
+                    try: # Try getting names from booster
+                        feature_names = model_xgb.get_booster().feature_names
+                    except Exception: feature_names = None
+                    if feature_names is None: # Fallback
+                        data_ref = st.session_state.get('data_prepared_for_modeling')
+                        if data_ref is not None:
+                            X_ref = data_ref.select_dtypes(include=np.number).drop(columns=['NumAcceptedCmps'], errors='ignore')
+                            flags_to_drop_ref = [c for c in campaign_components if c in X_ref.columns] # Use defined list
+                            X_ref = X_ref.drop(columns=flags_to_drop_ref, errors='ignore')
+                            feature_names = X_ref.columns.tolist()
+                        else: feature_names = [f'f{i}' for i in range(len(importances))]
+                    if len(feature_names) == len(importances):
+                        feature_importance_df = pd.DataFrame({'Feature': feature_names, 'Importance': importances}).sort_values(by='Importance', ascending=False)
+                    else: st.warning(f"Feature name/importance mismatch. Importances may be unreliable.")
+                except Exception as imp_err: st.warning(f"Could not retrieve feature importances: {imp_err}")
+
+        # --- Create Tabs for Broad and Detailed Insights ---
+        tab1, tab2 = st.tabs(["Broad Insights", "Detailed Insights"])
+
+        with tab1:
+            st.subheader("Broad Cluster Profiles & Strategies")
+            st.caption(f"Aggregated profiles based on key metrics ({index_source_caption if index_source_df is not None else ''})")
+
+            # --- Broad Hierarchical ---
+            st.markdown("---")
+            st.markdown("#### Hierarchical Clustering (Broad)")
+            if data_hier_insights is not None:
+                cols_for_broad = core_cols + broad_agg_cols
+                hier_broad_summary = get_cluster_summary(data_hier_insights, 'Hierarchical_Cluster', cols_for_broad)
+                if not hier_broad_summary.empty:
+                    st.dataframe(hier_broad_summary.style.format("{:,.1f}").background_gradient(cmap='viridis', axis=0))
+                    # Campaign Suggestions (using broad summary)
+                    # --- Re-define key column names here for safety ---
+                    income_col_insight = 'Income'
+                    recency_col_insight = 'Recency'
+                    # ----------------------------------------------------
+                    if xgb_trained and feature_importance_df is not None and hier_broad_summary is not None and not hier_broad_summary.empty: # Check summary exists
+                        st.markdown("**Campaign Suggestions (Hierarchical - Broad):**")
+                        important_features = feature_importance_df['Feature'].head(5).tolist()
+                        st.write(f"*Top driving features (XGBoost):* `{', '.join(important_features)}`")
+
+                        # Calculate overall medians/means safely
+                        # Ensure the column name variable exists AND the column is in the DataFrame
+                        overall_median_income = hier_broad_summary[income_col_insight].median() if income_col_insight in hier_broad_summary.columns else None
+                        overall_median_recency = hier_broad_summary[recency_col_insight].median() if recency_col_insight in hier_broad_summary.columns else None
+                    if xgb_trained and feature_importance_df is not None and hier_broad_summary is not None and not hier_broad_summary.empty: # Check summary exists
+                        st.markdown("**Campaign Suggestions (Hierarchical - Broad):**")
+                        important_features = feature_importance_df['Feature'].head(5).tolist()
+                        st.write(f"*Top driving features (XGBoost):* `{', '.join(important_features)}`")
+
+                        # Calculate overall medians/means safely
+                        overall_median_income = hier_broad_summary[income_col_insight].median() if income_col_insight in hier_broad_summary.columns else None
+                        overall_median_recency = hier_broad_summary[recency_col_insight].median() if recency_col_insight in hier_broad_summary.columns else None
+
+                        for cluster_id, profile in hier_broad_summary.iterrows():
+                            st.markdown(f"**Cluster {cluster_id} (Size: {profile['Size']:.0f}):**")
+                            insights = []
+                            # Check column exists in profile before using
+                            if age_col_insight and age_col_insight in profile and profile[age_col_insight] > 55: insights.append("Older.")
+                            elif age_col_insight and age_col_insight in profile and profile[age_col_insight] < 40: insights.append("Younger.")
+
+                            # Check overall median was calculable AND column exists in profile
+                            if overall_median_income is not None and income_col_insight in profile:
+                                if profile[income_col_insight] > overall_median_income * 1.1: insights.append("Higher Income.")
+                                elif profile[income_col_insight] < overall_median_income * 0.9: insights.append("Lower Income.")
+                            elif income_col_insight in profile: # If median failed but col exists, note it
+                                insights.append("Avg Income.") # Or some other default
+
+                            if overall_median_recency is not None and recency_col_insight in profile:
+                                if profile[recency_col_insight] < overall_median_recency * 0.8: insights.append("Very Recent.")
+                                elif profile[recency_col_insight] > overall_median_recency * 1.2: insights.append("Less Recent.")
+                            elif recency_col_insight in profile:
+                                insights.append("Avg Recency.")
+
+                            suggestions = []
+                            # Check column exists in important_features list AND insights were generated
+                            if income_col_insight in important_features and "Higher Income." in insights: suggestions.append("Premium offers.")
+                            if recency_col_insight in important_features and "Less Recent." in insights: suggestions.append("Reactivation.")
+                            if recency_col_insight in important_features and "Very Recent." in insights: suggestions.append("Loyalty/Welcome.")
+                            # ... add more rules ...
+                            if not insights: insights.append("Avg profile.")
+                            if not suggestions: suggestions.append("Standard.")
+                            st.write(f"- **Profile:** {' '.join(insights)} **Suggestions:** {' '.join(suggestions)}")
+                    elif hier_broad_summary is None or hier_broad_summary.empty:
+                        st.info("Broad summary table missing, cannot generate suggestions.")
+                    elif xgb_trained and feature_importance_df is None:
+                        st.warning("Could not retrieve feature importances for suggestions.")
+                    elif not xgb_trained:
+                        st.info("Train XGBoost model for campaign suggestions.")
+                else:
+                    st.warning("Could not generate broad summary for Hierarchical clusters.")
+            else:
+                st.info("Hierarchical clustering results not available or index mismatch.")
+
+            # --- Broad K-Means ---
+            st.markdown("---")
+            st.markdown("#### K-Means Clustering (Broad)")
+            if data_kmeans_insights is not None:
+                cols_for_broad = core_cols + broad_agg_cols
+                kmeans_broad_summary = get_cluster_summary(data_kmeans_insights, 'KMeans_Cluster', cols_for_broad)
+                if not kmeans_broad_summary.empty:
+                    st.dataframe(kmeans_broad_summary.style.format("{:,.1f}").background_gradient(cmap='viridis', axis=0))
+                    # Campaign Suggestions (using broad summary)
+                    # --- Re-define key column names here for safety ---
+                    income_col_insight = 'Income'
+                    recency_col_insight = 'Recency'
+                    # ----------------------------------------------------
+                    if xgb_trained and feature_importance_df is not None and kmeans_broad_summary is not None and not kmeans_broad_summary.empty: # Check summary exists
+                        st.markdown("**Campaign Suggestions (K-Means - Broad):**")
+                        important_features = feature_importance_df['Feature'].head(5).tolist()
+                        st.write(f"*Top driving features (XGBoost):* `{', '.join(important_features)}`")
+
+                        # Calculate overall medians/means safely
+                        # Ensure the column name variable exists AND the column is in the DataFrame
+                        overall_median_income_km = kmeans_broad_summary[income_col_insight].median() if income_col_insight in kmeans_broad_summary.columns else None
+                        overall_median_recency_km = kmeans_broad_summary[recency_col_insight].median() if recency_col_insight in kmeans_broad_summary.columns else None
+                    if xgb_trained and feature_importance_df is not None and kmeans_broad_summary is not None and not kmeans_broad_summary.empty: # Check summary exists
+                        st.markdown("**Campaign Suggestions (K-Means - Broad):**")
+                        important_features = feature_importance_df['Feature'].head(5).tolist()
+                        st.write(f"*Top driving features (XGBoost):* `{', '.join(important_features)}`")
+
+                        # Calculate overall medians/means safely
+                        overall_median_income_km = kmeans_broad_summary[income_col_insight].median() if income_col_insight in kmeans_broad_summary.columns else None
+                        overall_median_recency_km = kmeans_broad_summary[recency_col_insight].median() if recency_col_insight in kmeans_broad_summary.columns else None
+
+                        for cluster_id, profile in kmeans_broad_summary.iterrows():
+                            st.markdown(f"**Cluster {cluster_id} (Size: {profile['Size']:.0f}):**")
+                            insights = []
+                            # Check column exists in profile before using
+                            if age_col_insight and age_col_insight in profile and profile[age_col_insight] > 55: insights.append("Older.")
+                            elif age_col_insight and age_col_insight in profile and profile[age_col_insight] < 40: insights.append("Younger.")
+
+                            # Check overall median was calculable AND column exists in profile
+                            if overall_median_income_km is not None and income_col_insight in profile:
+                                if profile[income_col_insight] > overall_median_income_km * 1.1: insights.append("Higher Income.")
+                                elif profile[income_col_insight] < overall_median_income_km * 0.9: insights.append("Lower Income.")
+                            elif income_col_insight in profile:
+                                insights.append("Avg Income.")
+
+                            if overall_median_recency_km is not None and recency_col_insight in profile:
+                                if profile[recency_col_insight] < overall_median_recency_km * 0.8: insights.append("Very Recent.")
+                                elif profile[recency_col_insight] > overall_median_recency_km * 1.2: insights.append("Less Recent.")
+                            elif recency_col_insight in profile:
+                                insights.append("Avg Recency.")
+
+                            suggestions = []
+                            # Check column exists in important_features list AND insights were generated
+                            if income_col_insight in important_features and "Higher Income." in insights: suggestions.append("Premium offers.")
+                            if recency_col_insight in important_features and "Less Recent." in insights: suggestions.append("Reactivation.")
+                            if recency_col_insight in important_features and "Very Recent." in insights: suggestions.append("Loyalty/Welcome.")
+                            # ... add more rules ...
+                            if not insights: insights.append("Avg profile.")
+                            if not suggestions: suggestions.append("Standard.")
+                            st.write(f"- **Profile:** {' '.join(insights)} **Suggestions:** {' '.join(suggestions)}")
+                    elif kmeans_broad_summary is None or kmeans_broad_summary.empty:
+                        st.info("Broad summary table missing, cannot generate suggestions.")
+                    elif xgb_trained and feature_importance_df is None:
+                        st.warning("Could not retrieve feature importances for suggestions.")
+                    elif not xgb_trained:
+                        st.info("Train XGBoost model for campaign suggestions.")
+                else:
+                    st.warning("Could not generate broad summary for K-Means clusters.")
+            else:
+                st.info("K-Means clustering results not available or index mismatch.")
+
+
+        with tab2:
+            st.subheader("Detailed Cluster Profiles & Strategies")
+            st.caption(f"In-depth profiles including component metrics ({index_source_caption if index_source_df is not None else ''}). Use the text box to filter columns.")
+
+            # --- Column Selection Text Box ---
+            st.markdown("##### Select Columns to Display in Profiles")
+            # Provide default columns
+            default_cols_display = core_cols + broad_agg_cols[:1] # e.g., Age, Income, Recency, Frequency
+            cols_list_str = ", ".join(all_detailed_cols)
+            st.text(f"Available columns: {cols_list_str}")
+            user_cols_input = st.text_area(
+                "Enter column names separated by commas or newlines (leave blank for defaults):",
+                value=", ".join(default_cols_display), # Pre-fill with defaults
+                height=100,
+                key="detailed_cols_selector"
+            )
+
+            # Parse user input
+            selected_cols_to_display = [] # Initialize
+            if user_cols_input.strip():
+                selected_cols = [col.strip() for col in user_cols_input.replace('\n', ',').split(',') if col.strip()]
+                # Validate selected columns against all available detailed columns
+                valid_selected_cols = [col for col in selected_cols if col in all_detailed_cols]
+                invalid_selected_cols = [col for col in selected_cols if col not in all_detailed_cols]
+                if invalid_selected_cols:
+                    st.warning(f"Ignoring invalid column names: {', '.join(invalid_selected_cols)}")
+                if not valid_selected_cols: # If all were invalid or selection is empty after strip
+                    st.info("No valid columns selected, showing defaults.")
+                    selected_cols_to_display = default_cols_display
+                else:
+                    selected_cols_to_display = valid_selected_cols
+            else: # If input is empty, use defaults
+                selected_cols_to_display = default_cols_display
+
+            # Always include 'Size' in the display if available
+            if 'Size' not in selected_cols_to_display:
+                selected_cols_to_display.insert(0, 'Size') # Add Size at the beginning
+
+
+            # --- Detailed Hierarchical ---
+            st.markdown("---")
+            st.markdown("#### Hierarchical Clustering (Detailed Profile)")
+            hier_detailed_summary = None # Initialize
+            if data_hier_insights is not None:
+                hier_detailed_summary = get_cluster_summary(data_hier_insights, 'Hierarchical_Cluster', all_detailed_cols)
+                if not hier_detailed_summary.empty:
+                    # Filter the summary table based on user selection
+                    display_cols_hier = [col for col in selected_cols_to_display if col in hier_detailed_summary.columns]
+                    if not display_cols_hier or (len(display_cols_hier) == 1 and display_cols_hier[0] == 'Size'):
+                        st.warning("No valid data columns selected for display in profile.")
+                    else:
+                        st.dataframe(hier_detailed_summary[display_cols_hier].style.format("{:,.1f}").background_gradient(cmap='viridis', axis=0))
+                else:
+                    st.warning("Could not generate detailed summary for Hierarchical clusters.")
+            else:
+                st.info("Hierarchical clustering results not available or index mismatch.")
+
+            # --- Detailed Hierarchical Campaign Strategy ---
+            st.markdown("##### Campaign Strategies (Hierarchical - Detailed)")
+            if hier_detailed_summary is not None and not hier_detailed_summary.empty:
+                st.write("Suggestions based on detailed component preferences (product, place, past campaigns):")
+
+                # Calculate overall means for components from the detailed summary
+                component_overall_means_hier = {}
+                for col_group in [monetary_components, freq_components, campaign_components]:
+                    for col in col_group:
+                        if col in hier_detailed_summary.columns:
+                            component_overall_means_hier[col] = hier_detailed_summary[col].mean()
+
+                for cluster_id, profile in hier_detailed_summary.iterrows():
+                    st.markdown(f"**Cluster {cluster_id} (Size: {profile['Size']:.0f}):**")
+                    detailed_suggestions = []
+
+                    # Product Preferences -> Suggestions
+                    for col in monetary_components:
+                        if col in profile and col in component_overall_means_hier and profile[col] > component_overall_means_hier[col] * 1.2: # Threshold: 20% above average
+                            product_name = col.replace('Mnt', '').replace('Products','').replace('Prods','') # Simplify name
+                            detailed_suggestions.append(f"Promote {product_name}.")
+
+                    # Place Preferences -> Suggestions
+                    for col in freq_components:
+                        if col in profile and col in component_overall_means_hier and profile[col] > component_overall_means_hier[col] * 1.2:
+                            place_name = col.replace('Num','').replace('Purchases','')
+                            if place_name == 'Deals':
+                                detailed_suggestions.append("Highlight Discounts/Deals.")
+                            else:
+                                detailed_suggestions.append(f"Target via {place_name} channel.")
+
+                    # Past Campaign Response -> Suggestions
+                    for col in campaign_components:
+                        if col in profile and col in component_overall_means_hier and profile[col] > component_overall_means_hier[col] * 1.1: # Threshold: 10% above average acceptance rate
+                            campaign_name = col.replace('Accepted','').replace('Cmp',' Campaign ')
+                            if campaign_name == 'Response': campaign_name = 'Last Campaign'
+                            detailed_suggestions.append(f"Responded well to {campaign_name} type.")
+
+                    if not detailed_suggestions:
+                        detailed_suggestions.append("No strong component preferences detected; use broad strategy or general offers.")
+
+                    st.write(f"- **Detailed Suggestions:** {'; '.join(detailed_suggestions)}")
+            else:
+                st.info("Detailed Hierarchical profile needed for detailed campaign suggestions.")
+
+
+            # --- Detailed K-Means ---
+            st.markdown("---")
+            st.markdown("#### K-Means Clustering (Detailed Profile)")
+            kmeans_detailed_summary = None # Initialize
+            if data_kmeans_insights is not None:
+                kmeans_detailed_summary = get_cluster_summary(data_kmeans_insights, 'KMeans_Cluster', all_detailed_cols)
+                if not kmeans_detailed_summary.empty:
+                    # Filter the summary table based on user selection
+                    display_cols_kmeans = [col for col in selected_cols_to_display if col in kmeans_detailed_summary.columns]
+                    if not display_cols_kmeans or (len(display_cols_kmeans) == 1 and display_cols_kmeans[0] == 'Size'):
+                        st.warning("No valid data columns selected for display in profile.")
+                    else:
+                        st.dataframe(kmeans_detailed_summary[display_cols_kmeans].style.format("{:,.1f}").background_gradient(cmap='viridis', axis=0))
+                else:
+                    st.warning("Could not generate detailed summary for K-Means clusters.")
+            else:
+                st.info("K-Means clustering results not available or index mismatch.")
+
+            # --- Detailed K-Means Campaign Strategy ---
+            st.markdown("##### Campaign Strategies (K-Means - Detailed)")
+            if kmeans_detailed_summary is not None and not kmeans_detailed_summary.empty:
+                st.write("Suggestions based on detailed component preferences (product, place, past campaigns):")
+
+                # Calculate overall means for components from the detailed summary
+                component_overall_means_kmeans = {}
+                for col_group in [monetary_components, freq_components, campaign_components]:
+                    for col in col_group:
+                        if col in kmeans_detailed_summary.columns:
+                            component_overall_means_kmeans[col] = kmeans_detailed_summary[col].mean()
+
+                for cluster_id, profile in kmeans_detailed_summary.iterrows():
+                    st.markdown(f"**Cluster {cluster_id} (Size: {profile['Size']:.0f}):**")
+                    detailed_suggestions = []
+
+                    # Product Preferences -> Suggestions
+                    for col in monetary_components:
+                        if col in profile and col in component_overall_means_kmeans and profile[col] > component_overall_means_kmeans[col] * 1.2:
+                            product_name = col.replace('Mnt', '').replace('Products','').replace('Prods','')
+                            detailed_suggestions.append(f"Promote {product_name}.")
+
+                    # Place Preferences -> Suggestions
+                    for col in freq_components:
+                        if col in profile and col in component_overall_means_kmeans and profile[col] > component_overall_means_kmeans[col] * 1.2:
+                            place_name = col.replace('Num','').replace('Purchases','')
+                            if place_name == 'Deals':
+                                detailed_suggestions.append("Highlight Discounts/Deals.")
+                            else:
+                                detailed_suggestions.append(f"Target via {place_name} channel.")
+
+                    # Past Campaign Response -> Suggestions
+                    for col in campaign_components:
+                        if col in profile and col in component_overall_means_kmeans and profile[col] > component_overall_means_kmeans[col] * 1.1:
+                            campaign_name = col.replace('Accepted','').replace('Cmp',' Campaign ')
+                            if campaign_name == 'Response': campaign_name = 'Last Campaign'
+                            detailed_suggestions.append(f"Responded well to {campaign_name} type.")
+
+                    if not detailed_suggestions:
+                        detailed_suggestions.append("No strong component preferences detected; use broad strategy or general offers.")
+
+                    st.write(f"- **Detailed Suggestions:** {'; '.join(detailed_suggestions)}")
+            else:
+                st.info("Detailed K-Means profile needed for detailed campaign suggestions.")
+
+    # ==================================================
+    # End of Business Insights Section
+    # ==================================================
     
     
     # --- End of the main `if st.session_state.data is not None:` block ---
