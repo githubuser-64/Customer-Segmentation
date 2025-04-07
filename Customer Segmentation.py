@@ -2131,7 +2131,7 @@ if st.session_state.data is not None:
                         current_method = st.session_state.selected_linkage_method
                         st.write(f"Performing {current_method.capitalize()} linkage on first {n_components_for_clustering} PCA components...")
                         pca_data_subset_link = st.session_state.pca_data[:, :n_components_for_clustering]
-                        st.session_state.linkage_matrix = linkage(pca_data_subset_link, method='ward')
+                        st.session_state.linkage_matrix = linkage(pca_data_subset_link, method=current_method)
                         distances = st.session_state.linkage_matrix[:, 2]
                         diffs = np.diff(distances)
                         idx_largest_diff = np.argmax(diffs) if len(diffs) > 0 else 0
