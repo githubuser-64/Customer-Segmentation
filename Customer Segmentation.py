@@ -941,6 +941,8 @@ if 'show_duplicates' not in st.session_state:
     st.session_state.show_duplicates = False
 
 # State for Modeling Preparation
+if 'dropped_cols_list_step1' not in st.session_state:
+    st.session_state.dropped_cols_list_step1 = None
 if 'data_prepared_for_modeling' not in st.session_state: st.session_state.data_prepared_for_modeling = None
 if 'modeling_data_prepared' not in st.session_state: st.session_state.modeling_data_prepared = False
 
@@ -948,6 +950,9 @@ if 'modeling_data_prepared' not in st.session_state: st.session_state.modeling_d
 if 'data_no_outliers' not in st.session_state: st.session_state.data_no_outliers = None
 if 'outliers_removed' not in st.session_state: st.session_state.outliers_removed = False
 if 'num_outliers_removed' not in st.session_state: st.session_state.num_outliers_removed = 0
+if 'data_no_outliers_shape' not in st.session_state: st.session_state.data_no_outliers_shape = None
+if 'data_no_outliers_head' not in st.session_state: st.session_state.data_no_outliers_head = None
+
 
 # State for Scaling and PCA
 if 'scaled_data' not in st.session_state: st.session_state.scaled_data = None
@@ -957,17 +962,22 @@ if 'pca_done' not in st.session_state: st.session_state.pca_done = False
 if 'pca_scree_fig' not in st.session_state: st.session_state.pca_scree_fig = None
 if 'show_pca_scree' not in st.session_state: st.session_state.show_pca_scree = False
 
-# State for Hierarchical Clustering
-if 'linkage_matrix' not in st.session_state: st.session_state.linkage_matrix = None
-if 'hierarchical_done' not in st.session_state: st.session_state.hierarchical_done = False
-if 'dendrogram_fig' not in st.session_state: st.session_state.dendrogram_fig = None
-if 'show_dendrogram' not in st.session_state: st.session_state.show_dendrogram = False
-
 # State for t-SNE
 if 'tsne_data' not in st.session_state: st.session_state.tsne_data = None
 if 'tsne_done' not in st.session_state: st.session_state.tsne_done = False
 if 'tsne_plot_fig' not in st.session_state: st.session_state.tsne_plot_fig = None
 if 'show_tsne_plot' not in st.session_state: st.session_state.show_tsne_plot = False
+
+# State for Hierarchical Clustering
+if 'linkage_matrix' not in st.session_state: st.session_state.linkage_matrix = None
+if 'optimal_y_value' not in st.session_state: st.session_state.optimal_y_value = None
+if 'selected_linkage_method' not in st.session_state: st.session_state.selected_linkage_method = 'ward' # Already likely present
+if 'dendrogram_fig' not in st.session_state: st.session_state.dendrogram_fig = None # Need to store the generated fig
+if 'hierarchical_done' not in st.session_state: st.session_state.hierarchical_done = False # Already likely present (for cluster assignment)
+if 'hierarchical_n_clusters' not in st.session_state: st.session_state.hierarchical_n_clusters = 3 # Or your preferred default
+if 'hierarchical_labels_for_tsne' not in st.session_state: st.session_state.hierarchical_labels_for_tsne = None # Already likely present
+if 'hierarchical_tsne_fig' not in st.session_state: st.session_state.hierarchical_tsne_fig = None # Already likely present
+if 'show_dendrogram' not in st.session_state: st.session_state.show_dendrogram = False
 
 # State for K-Means
 if 'n_clusters' not in st.session_state: st.session_state.n_clusters = 5 # Default k
@@ -1017,6 +1027,7 @@ if 'xgb_baseline_rmse' not in st.session_state: st.session_state.xgb_baseline_rm
 if 'xgb_plot_fig' not in st.session_state: st.session_state.xgb_plot_fig = None
 if 'xgb_model_trained_success' not in st.session_state: st.session_state.xgb_model_trained_success = False # Track if training completed
 if 'xgb_feature_importances_fig' not in st.session_state: st.session_state.xgb_feature_importances_fig = None # For feature importance
+
 
 # --- End Initialization ---
 
@@ -1873,9 +1884,11 @@ if st.session_state.data is not None:
     with st.expander("Show Modeling Steps", expanded=True): # Start expanded
 
         # --- Step 1: Prepare Data for Modeling ---
+        # --- Step 1: Prepare Data for Modeling ---
         st.subheader("Step 1: Prepare Data for Modeling")
         st.markdown("*(Requires Feature Engineering to be completed first)*")
 
+        # --- Action Button ---
         if st.session_state.get('feature_engineering_done', False):
             if st.button("Prepare Data (Encode & Drop Features)", key="prep_model_data_btn"):
                 if st.session_state.data_copy_engineered is not None:
@@ -1884,447 +1897,609 @@ if st.session_state.data is not None:
 
                         # Apply One-Hot Encoding
                         categorical_cols = ['Education', 'Marital_Status']
+                        encoded_cols_info = [] # To track which columns were encoded
                         for col in categorical_cols:
                             if col in data_prep.columns:
-                                # Ensure NaNs are explicitly handled or ignored if needed before get_dummies
-                                # For simplicity here, assuming NaNs in these cols are not intended or handled upstream
-                                dummies = pd.get_dummies(data_prep[col], prefix=col, drop_first=True, dummy_na=False) # dummy_na=False prevents NA column
-                                data_prep.drop(col, axis=1, inplace=True)
+                                # Ensure consistent handling of NaNs/Types before get_dummies
+                                data_prep[col] = data_prep[col].astype(str).fillna('Missing') # Convert to string, fill NA
+                                dummies = pd.get_dummies(data_prep[col], prefix=col, drop_first=True, dummy_na=False)
+                                data_prep = data_prep.drop(col, axis=1) # Drop original categorical column
                                 data_prep = pd.concat([data_prep, dummies], axis=1)
-                                st.write(f"Applied One-Hot Encoding to '{col}'.")
+                                encoded_cols_info.append(col) # Record successful encoding
 
-                        # Drop specified columns
+                        if encoded_cols_info:
+                            st.write(f"Applied One-Hot Encoding to: {', '.join(encoded_cols_info)}") # Temporary message during action
+
+                        # Define columns intended for dropping
                         columns_to_drop = ['ID', 'Dt_Customer', 'Year_Birth', 'Age_On_Enrollment_Day', 'MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds',
                                     'NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases',
-                                           'AcceptedCmp3', 'AcceptedCmp4', 'AcceptedCmp5',
-                                           'AcceptedCmp1', 'AcceptedCmp2', 'Complain',
-                                           'Z_CostContact', 'Z_Revenue', 'Response']
+                                        'AcceptedCmp3', 'AcceptedCmp4', 'AcceptedCmp5',
+                                        'AcceptedCmp1', 'AcceptedCmp2', 'Complain',
+                                        'Z_CostContact', 'Z_Revenue', 'Response']
+                        # Determine which columns actually exist in the dataframe to be dropped
                         actual_cols_to_drop = [col for col in columns_to_drop if col in data_prep.columns]
-                        data_prep.drop(columns=actual_cols_to_drop, axis=1, inplace=True)
-                        st.write(f"Dropped columns: {', '.join(actual_cols_to_drop)}")
 
-                        # # Handle potential infinite values or NaNs introduced (e.g., from ratios) before modeling
-                        # data_prep.replace([np.inf, -np.inf], np.nan, inplace=True)
-                        # cols_with_na = data_prep.isnull().sum()
-                        # cols_to_fill = cols_with_na[cols_with_na > 0].index.tolist()
-                        # if cols_to_fill:
-                        #      # Simple fill with 0 - review if median/mean is better for specific cols
-                        #     data_prep.fillna(0, inplace=True)
-                        #     st.warning(f"Filled NAs with 0 in columns: {', '.join(cols_to_fill)} before modeling.")
+                        # Perform the drop
+                        if actual_cols_to_drop:
+                            data_prep.drop(columns=actual_cols_to_drop, axis=1, inplace=True)
+                            # Store the list of actually dropped columns in session state
+                            st.session_state.dropped_cols_list_step1 = actual_cols_to_drop
+                        else:
+                            st.session_state.dropped_cols_list_step1 = [] # Store empty list if none were dropped
 
+                        # --- Handle potential infinite values or NaNs ---
+                        # Check *after* potential calculations and drops, before storing
+                        if data_prep.isnull().values.any() or np.isinf(data_prep.select_dtypes(include=np.number).values).any():
+                            st.warning("NaNs or Infinite values detected after preparation. Attempting to handle...")
+                            data_prep = data_prep.replace([np.inf, -np.inf], np.nan)
+                            # Simple fill with 0 for remaining NaNs - review if median/mean is better
+                            cols_with_na = data_prep.isnull().sum()
+                            cols_to_fill = cols_with_na[cols_with_na > 0].index.tolist()
+                            if cols_to_fill:
+                                data_prep.fillna(0, inplace=True)
+                                st.warning(f"Filled NaNs with 0 in columns: {', '.join(cols_to_fill)}")
+                        # --------------------------------------------------
+
+                        # Store the prepared data in session state
                         st.session_state.data_prepared_for_modeling = data_prep
+                        # Set the flag indicating preparation is done
                         st.session_state.modeling_data_prepared = True
-                        # Reset downstream steps if data is re-prepared
+
+                        # Reset downstream steps flags (keep this logic)
                         st.session_state.outliers_removed = False
                         st.session_state.pca_done = False
                         st.session_state.tsne_done = False
                         st.session_state.hierarchical_done = False
                         st.session_state.kmeans_done = False
-                        # Hide plots from previous runs if data is re-prepared
+                        # Hide downstream plots flags (keep this logic)
                         st.session_state.show_pca_scree = False
                         st.session_state.show_dendrogram = False
                         st.session_state.show_tsne_plot = False
                         st.session_state.show_kmeans_plot = False
 
-                        st.success("Data prepared for modeling.")
-                        st.dataframe(st.session_state.data_prepared_for_modeling.head()) # Show sample
+                        # --- No success message or dataframe display here ---
+                        # Let the persistent display block below handle it after the rerun
 
                     except Exception as e:
                         st.error(f"Error during data preparation: {e}")
                         st.session_state.modeling_data_prepared = False
+                        st.session_state.data_prepared_for_modeling = None # Clear data on error
+                        st.session_state.dropped_cols_list_step1 = None # Clear list on error
                 else:
-                    st.warning("Engineered data not found. Run Feature Engineering first.")
+                    st.warning("Engineered data (`data_copy_engineered`) not found in session state. Run Feature Engineering first.")
         else:
             st.info("Run Feature Engineering first to enable data preparation.")
-        st.markdown("---") # Separator after step
 
+
+        # --- Persistent Display Area for Step 1 Results ---
+        # This block is OUTSIDE the button's if statement
+        # It checks the flag on EVERY rerun
+        if st.session_state.get('modeling_data_prepared', False):
+            st.success("Data prepared for modeling.") # Show success message
+
+            # Show dropped columns list if it exists in state
+            dropped_list = st.session_state.get('dropped_cols_list_step1')
+            if dropped_list is not None:
+                if dropped_list:
+                    st.write(f"**Columns Dropped:** {', '.join(dropped_list)}")
+                else:
+                    st.write("**Columns Dropped:** None")
+
+            # Show dataframe head if it exists in state
+            prepared_df = st.session_state.get('data_prepared_for_modeling')
+            if prepared_df is not None:
+                st.write("**Prepared Data Sample (Head):**")
+                st.dataframe(prepared_df.head())
+            else:
+                # This case might occur if flag is True but data somehow got cleared
+                st.warning("Modeling data is marked as prepared, but the DataFrame is missing.")
+
+        # Separator after Step 1's section (action button + persistent display)
+        st.markdown("---")
+        # --------------------------------------------------------
+
+        # --- Step 2: Outlier Detection ---
         # --- Step 2: Outlier Detection ---
         st.subheader("Step 2: Detect and Remove Outliers")
         if st.session_state.get('modeling_data_prepared', False):
             contamination_level = st.slider("Select Contamination Level (Outlier %)", 0.001, 0.1, 0.01, 0.001, format="%.3f", key="iso_contamination")
 
+            # --- Action Button ---
             if st.button("Run Isolation Forest", key="run_iso_forest_btn"):
                 if st.session_state.data_prepared_for_modeling is not None:
                     try:
-                        data_to_scan = st.session_state.data_prepared_for_modeling
+                        data_to_scan = st.session_state.data_prepared_for_modeling.copy() # Use copy
 
+                        # --- Perform Calculation ---
                         iso_forest = IsolationForest(n_estimators=100,
-                                                     contamination=contamination_level,
-                                                     random_state=42,
-                                                     n_jobs=-1)
-                        st.write(f"Fitting Isolation Forest (contamination={contamination_level:.3f})...")
+                                                    contamination=contamination_level,
+                                                    random_state=42,
+                                                    n_jobs=-1)
+                        st.write(f"Fitting Isolation Forest (contamination={contamination_level:.3f})...") # Temporary message okay here
                         iso_forest.fit(data_to_scan)
-                        st.write("Predicting outliers...")
+                        st.write("Predicting outliers...") # Temporary message okay here
                         outlier_predictions = iso_forest.predict(data_to_scan)
 
+                        # --- Store Results ---
                         is_inlier = outlier_predictions == 1
                         n_outliers_found = (outlier_predictions == -1).sum()
-                        st.session_state.num_outliers_removed = n_outliers_found
+                        st.session_state.num_outliers_removed = n_outliers_found # Store count
+                        data_no_outliers_df = data_to_scan[is_inlier].copy()
+                        st.session_state.data_no_outliers = data_no_outliers_df # Store filtered dataframe
+                        st.session_state.data_no_outliers_shape = data_no_outliers_df.shape # Store shape
+                        st.session_state.data_no_outliers_head = data_no_outliers_df.head() # Store head
 
-                        st.session_state.data_no_outliers = data_to_scan[is_inlier].copy()
+                        # --- Set Status Flag ---
                         st.session_state.outliers_removed = True
-                        # Reset downstream steps
+
+                        # --- Reset Downstream Steps ---
                         st.session_state.pca_done = False
                         st.session_state.tsne_done = False
-                        st.session_state.hierarchical_done = False
+                        st.session_state.hierarchical_done = False # Reset cluster assignment status
+                        st.session_state.linkage_matrix = None # Reset linkage matrix
+                        st.session_state.dendrogram_fig = None # Clear old dendrogram figure
+                        st.session_state.hierarchical_tsne_fig = None # Clear old viz figure
                         st.session_state.kmeans_done = False
-                        # Hide plots from previous runs
-                        st.session_state.show_pca_scree = False
-                        st.session_state.show_dendrogram = False
-                        st.session_state.show_tsne_plot = False
-                        st.session_state.show_kmeans_plot = False
+                        st.session_state.kmeans_plot_fig = None # Clear old kmeans figure
+                        # Clear potentially stored data/figs from downstream as well
+                        st.session_state.scaled_data = None
+                        st.session_state.pca_data = None
+                        st.session_state.pca_scree_fig = None
+                        st.session_state.tsne_data = None
+                        st.session_state.tsne_plot_fig = None
+                        st.session_state.kmeans_labels = None
+                        st.session_state.hierarchical_labels_for_tsne = None
 
-                        st.success(f"Outlier detection complete. Removed {n_outliers_found} potential outliers ({n_outliers_found / len(data_to_scan):.2%}).")
-                        st.write("Shape after outlier removal:", st.session_state.data_no_outliers.shape)
-                        st.dataframe(st.session_state.data_no_outliers.head())
+                        # --- No display inside button block ---
 
                     except Exception as e:
                         st.error(f"Error during Isolation Forest: {e}")
                         st.session_state.outliers_removed = False
+                        # Clear results on error
+                        st.session_state.num_outliers_removed = None
+                        st.session_state.data_no_outliers = None
+                        st.session_state.data_no_outliers_shape = None
+                        st.session_state.data_no_outliers_head = None
                 else:
-                    st.warning("Prepared data not found. Run Step 1 first.")
+                    st.warning("Prepared data (`data_prepared_for_modeling`) not found. Run Step 1 first.")
+
+            # --- Persistent Display Area for Step 2 ---
+            if st.session_state.get('outliers_removed', False):
+                n_removed = st.session_state.get('num_outliers_removed', 'N/A')
+                original_len = len(st.session_state.get('data_prepared_for_modeling', [])) # Get original length safely
+                percentage = (n_removed / original_len * 100) if isinstance(n_removed, int) and original_len > 0 else 'N/A'
+                percentage_str = f"{percentage:.2f}%" if isinstance(percentage, float) else percentage
+
+                st.success(f"Outlier detection complete. Removed {n_removed} potential outliers ({percentage_str}).")
+
+                shape = st.session_state.get('data_no_outliers_shape')
+                if shape:
+                    st.write("Shape after outlier removal:", shape)
+
+                df_head = st.session_state.get('data_no_outliers_head')
+                if df_head is not None: # Check if df_head exists and is not None
+                    st.write("Data after Outlier Removal (Head):")
+                    st.dataframe(df_head)
+                # else: # Optional: Handle case where flag is true but head is missing
+                #     st.warning("Outlier removal marked complete, but sample data is missing.")
+
         else:
             st.info("Prepare data (Step 1) first.")
         st.markdown("---") # Separator after step
 
+
         # --- Step 3: Scaling and PCA ---
         st.subheader("Step 3: Scale Data and Run PCA")
         if st.session_state.get('outliers_removed', False):
+
+            # --- Action Button ---
             if st.button("Run Scaling and PCA", key="run_pca_btn"):
                 if st.session_state.data_no_outliers is not None:
                     try:
-                        data_to_scale = st.session_state.data_no_outliers.copy()
+                        data_to_scale = st.session_state.data_no_outliers.copy() # Use copy
+                        # Check for non-numeric columns that shouldn't be scaled
                         numerical_cols = data_to_scale.select_dtypes(include=np.number).columns.tolist()
-                        st.write(f"Scaling numerical columns...") # : {', '.join(numerical_cols)}
+                        non_numeric_cols = data_to_scale.select_dtypes(exclude=np.number).columns.tolist()
+                        if non_numeric_cols:
+                            st.warning(f"Non-numeric columns found and excluded from scaling: {', '.join(non_numeric_cols)}")
 
+                        if not numerical_cols:
+                            raise ValueError("No numerical columns found to scale and perform PCA.")
+
+                        # --- Perform Scaling ---
+                        st.write(f"Scaling numerical columns...") # Temp message okay
                         scaler = StandardScaler()
                         scaled_data_array = scaler.fit_transform(data_to_scale[numerical_cols])
-                        st.session_state.scaled_data = pd.DataFrame(scaled_data_array, columns=numerical_cols, index=data_to_scale.index)
+                        scaled_df = pd.DataFrame(scaled_data_array, columns=numerical_cols, index=data_to_scale.index)
+                        st.session_state.scaled_data = scaled_df # Store scaled data
 
-                        st.write("Running PCA on scaled data...")
+                        # --- Perform PCA ---
+                        st.write("Running PCA on scaled data...") # Temp message okay
                         pca = PCA(random_state=42)
-                        pca.fit(st.session_state.scaled_data)
-                        st.session_state.pca_model = pca
-                        st.session_state.pca_data = pca.transform(st.session_state.scaled_data)
+                        pca.fit(scaled_df)
+                        st.session_state.pca_model = pca # Store fitted PCA model
+                        st.session_state.pca_data = pca.transform(scaled_df) # Store PCA-transformed data (numpy array)
 
-                        st.session_state.pca_scree_fig = plot_pca_scree_plot(st.session_state.scaled_data)
+                        # --- Generate Plot ---
+                        st.session_state.pca_scree_fig = plot_pca_scree_plot(scaled_df) # Store figure object
+
+                        # --- Set Status Flag ---
                         st.session_state.pca_done = True
-                        st.session_state.show_pca_scree = True # Set flag to show immediately
-                         # Reset downstream steps
+
+                        # --- Reset Downstream Steps ---
                         st.session_state.tsne_done = False
                         st.session_state.hierarchical_done = False
+                        st.session_state.linkage_matrix = None
+                        st.session_state.dendrogram_fig = None
+                        st.session_state.hierarchical_tsne_fig = None
                         st.session_state.kmeans_done = False
-                        # Hide plots from previous downstream runs
-                        st.session_state.show_dendrogram = False
-                        st.session_state.show_tsne_plot = False
-                        st.session_state.show_kmeans_plot = False
+                        st.session_state.kmeans_plot_fig = None
+                        # Clear downstream data/figs
+                        st.session_state.tsne_data = None
+                        st.session_state.tsne_plot_fig = None
+                        st.session_state.kmeans_labels = None
+                        st.session_state.hierarchical_labels_for_tsne = None
 
-                        st.success("Scaling and PCA complete.")
-                        # Optionally show PCA results head: st.dataframe(pd.DataFrame(st.session_state.pca_data).head())
+                        # --- No display inside button block ---
 
                     except Exception as e:
                         st.error(f"Error during Scaling/PCA: {e}")
                         st.session_state.pca_done = False
-                        st.session_state.show_pca_scree = False # Ensure flag is false on error
+                        # Clear results on error
+                        st.session_state.scaled_data = None
+                        st.session_state.pca_model = None
+                        st.session_state.pca_data = None
+                        st.session_state.pca_scree_fig = None
                 else:
-                    st.warning("Outlier-free data not found. Run Step 2 first.")
+                    st.warning("Outlier-free data (`data_no_outliers`) not found. Run Step 2 first.")
 
-            # Display Area for PCA Scree Plot (within Step 3)
-            if st.session_state.get('show_pca_scree', False):
-                st.markdown("#### PCA Scree Plot")
+            # --- Persistent Display Area for Step 3 ---
+            if st.session_state.get('pca_done', False):
+                st.success("Scaling and PCA complete.")
+                # Display PCA Scree Plot if figure exists
                 if st.session_state.pca_scree_fig:
+                    st.markdown("#### PCA Scree Plot")
                     st.pyplot(st.session_state.pca_scree_fig, use_container_width=False)
-                    if st.button("Hide PCA Scree Plot", key="hide_pca_btn_inline"):
-                        st.session_state.show_pca_scree = False
-                        st.rerun()
-                else:
-                    # This case means the button was clicked, flag is true, but fig is None (error happened)
-                    st.warning("Could not generate PCA Scree Plot.")
-                    st.session_state.show_pca_scree = False # Reset flag
+                    # No need for separate show/hide flags if display is tied to pca_done
+                    # If you want explicit hide:
+                    # if st.button("Hide PCA Scree Plot", key="hide_pca_btn_inline"):
+                    #     st.session_state.pca_scree_fig = None # Or set a hide flag
+                    #     st.rerun()
+                # else: # Optional: Handle case where flag is true but fig is missing
+                    # st.warning("PCA marked complete, but scree plot figure is missing.")
+                # Optionally show head of PCA data
+                # if st.session_state.pca_data is not None:
+                #     st.write("PCA Transformed Data (Head):")
+                #     st.dataframe(pd.DataFrame(st.session_state.pca_data).head())
 
         else:
             st.info("Remove outliers (Step 2) first.")
         st.markdown("---") # Separator after step
 
-        
-        # --- Step 5: t-SNE Visualization ---
+
+        # --- Step 4: t-SNE Visualization ---
         st.subheader("Step 4: t-SNE Visualization")
         if st.session_state.get('pca_done', False):
-             if st.session_state.pca_data is not None:
-                 max_pca_components_tsne = st.session_state.pca_data.shape[1]
-                 # Default to more components for t-SNE usually
-                 default_tsne_comps = min(30, max_pca_components_tsne)
-                 n_components_for_tsne = st.slider("Number of PCA Components for t-SNE", 2, max_pca_components_tsne, default_tsne_comps, 1, key="pca_comps_tsne")
-                 pca_data_subset_tsne = st.session_state.pca_data[:, :n_components_for_tsne]
+            if st.session_state.pca_data is not None:
+                max_pca_components_tsne = st.session_state.pca_data.shape[1]
+                default_tsne_comps = min(30, max_pca_components_tsne)
+                n_components_for_tsne = st.slider("Number of PCA Components for t-SNE", 2, max_pca_components_tsne, default_tsne_comps, 1, key="pca_comps_tsne")
 
-                 perplexity_value = st.slider("t-SNE Perplexity.\nHigher perplexity values emphasize broader structures, while lower values prioritize local relationships. Higher perplexity, higher computational time and memory usage.\nVisit: https://scikit-learn.org/stable/auto_examples/manifold/plot_t_sne_perplexity.html", 5, 50, 30, 1, key="tsne_perplexity")
-                 n_iter_value = st.select_slider("t-SNE Iterations", options=[250, 500, 1000, 2000], value=1000, key="tsne_iter")
+                perplexity_value = st.slider("t-SNE Perplexity", 5, 50, 30, 1, key="tsne_perplexity", help="Higher values look at broader structures, lower values prioritize local relationships. Affects computation time.")
+                n_iter_value = st.select_slider("t-SNE Iterations", options=[250, 500, 1000, 2000], value=1000, key="tsne_iter")
 
-                 if st.button("Run t-SNE", key="run_tsne_btn"):
-                     try:
-                         st.write(f"Running t-SNE on first {n_components_for_tsne} PCA components (Perplexity={perplexity_value}, Iterations={n_iter_value})... This may take a moment.")
-                         tsne = TSNE(n_components=2,
-                                     perplexity=perplexity_value,
-                                     n_iter=n_iter_value,
-                                     random_state=42,
-                                     n_jobs=-1)
-                         st.session_state.tsne_data = tsne.fit_transform(pca_data_subset_tsne)
-                         st.session_state.tsne_plot_fig = plot_tsne(st.session_state.tsne_data)
-                         st.session_state.tsne_done = True
-                         st.session_state.show_tsne_plot = True # Show immediately
-                          # Reset K-Means if t-SNE is re-run
-                         st.session_state.kmeans_done = False
-                         st.session_state.show_kmeans_plot = False
-                         st.success("t-SNE calculation complete.")
+                # --- Action Button ---
+                if st.button("Run t-SNE", key="run_tsne_btn"):
+                    try:
+                        # Use selected number of PCA components
+                        pca_data_subset_tsne = st.session_state.pca_data[:, :n_components_for_tsne]
 
-                     except Exception as e:
-                         st.error(f"Error during t-SNE: {e}")
-                         st.session_state.tsne_done = False
-                         st.session_state.show_tsne_plot = False # Ensure flag is false on error
+                        st.write(f"Running t-SNE on first {n_components_for_tsne} PCA components (Perplexity={perplexity_value}, Iterations={n_iter_value})... This may take a moment.") # Temp message ok
 
-                 # Display Area for t-SNE Plot (within Step 5)
-                 if st.session_state.get('show_tsne_plot', False):
-                     st.markdown("#### t-SNE Plot")
-                     if st.session_state.tsne_plot_fig:
-                         st.pyplot(st.session_state.tsne_plot_fig, use_container_width=False)
-                         if st.button("Hide t-SNE Plot", key="hide_tsne_btn_inline"):
-                             st.session_state.show_tsne_plot = False
-                             st.rerun()
-                     else:
-                         st.warning("Could not generate t-SNE plot.")
-                         st.session_state.show_tsne_plot = False # Reset flag
-             else:
-                 st.warning("PCA results not found.")
+                        # --- Perform Calculation ---
+                        tsne = TSNE(n_components=2,
+                                    perplexity=perplexity_value,
+                                    n_iter=n_iter_value,
+                                    random_state=42,
+                                    n_jobs=-1)
+                        tsne_result_data = tsne.fit_transform(pca_data_subset_tsne)
+                        st.session_state.tsne_data = tsne_result_data # Store result (numpy array)
+
+                        # --- Generate Plot ---
+                        st.session_state.tsne_plot_fig = plot_tsne(tsne_result_data) # Store figure
+
+                        # --- Set Status Flag ---
+                        st.session_state.tsne_done = True
+
+                        # --- Reset Downstream Steps ---
+                        # Reset K-Means and Hierarchical Cluster Viz if t-SNE is re-run
+                        st.session_state.kmeans_done = False
+                        st.session_state.kmeans_plot_fig = None
+                        st.session_state.kmeans_labels = None
+                        st.session_state.hierarchical_tsne_fig = None # Clear the viz plot
+
+                        # --- No display inside button block ---
+
+                    except Exception as e:
+                        st.error(f"Error during t-SNE: {e}")
+                        st.session_state.tsne_done = False
+                        # Clear results on error
+                        st.session_state.tsne_data = None
+                        st.session_state.tsne_plot_fig = None
+
+            else:
+                st.warning("PCA results (`pca_data`) not found.")
+
+            # --- Persistent Display Area for Step 4 ---
+            if st.session_state.get('tsne_done', False):
+                st.success("t-SNE calculation complete.")
+                if st.session_state.tsne_plot_fig:
+                    st.markdown("#### t-SNE Plot")
+                    st.pyplot(st.session_state.tsne_plot_fig, use_container_width=False)
+                    # Optionally add hide button if desired
+                    # if st.button("Hide t-SNE Plot", key="hide_tsne_btn_inline"):
+                    #     st.session_state.tsne_plot_fig = None # Or set hide flag
+                    #     st.rerun()
+                # else: # Optional: Handle case where flag is true but fig is missing
+                #     st.warning("t-SNE marked complete, but plot figure is missing.")
+
         else:
             st.info("Run PCA (Step 3) first.")
         st.markdown("---") # Separator after step
 
-        # --- Step 4: Hierarchical Clustering (Dendrogram & Cluster Selection) ---
-        st.subheader("Step 5: Hierarchical Clustering (Dendrogram & Cluster Selection)")
+
+        # --- Step 5: Hierarchical Clustering (Dendrogram & Cluster Selection) ---
+        st.subheader("Step 5: Hierarchical Clustering")
         if st.session_state.get('pca_done', False):
-             if st.session_state.pca_data is not None:
+            if st.session_state.pca_data is not None:
                 max_pca_components = st.session_state.pca_data.shape[1]
                 default_hier_comps = min(10, max_pca_components)
-                n_components_for_clustering = st.slider("Number of PCA Components for Hierarchical Clustering", 2, max_pca_components, default_hier_comps, 1, key="pca_comps_hierarchical_slider_v2") # Changed key
+                n_components_for_clustering = st.slider(
+                    "PCA Components for Linkage Calculation", 2, max_pca_components, default_hier_comps, 1,
+                    key="pca_comps_hierarchical_slider_v2"
+                )
 
-                # --- Add Selectbox for Linkage Method ---
                 linkage_options = ['ward', 'complete', 'average', 'single']
-                # Initialize session state if it doesn't exist
-                if 'selected_linkage_method' not in st.session_state:
-                    st.session_state.selected_linkage_method = 'ward' # Default
-
                 selected_method = st.selectbox(
-                    "Select Linkage Method:",
-                    options=linkage_options,
-                    index=linkage_options.index(st.session_state.selected_linkage_method), # Set default based on state
+                    "Select Linkage Method:", options=linkage_options,
+                    index=linkage_options.index(st.session_state.get('selected_linkage_method', 'ward')), # Get from state or default
                     key="linkage_method_selector"
                 )
-                # Update session state when selection changes (selectbox handles this automatically)
+                # Update state immediately if selection changes (selectbox does this)
                 st.session_state.selected_linkage_method = selected_method
-                # ----------------------------------------
 
-                # --- Calculate Linkage ---
-                recalculate_linkage = st.button("Recalculate Linkage Matrix", key="recalc_linkage_btn_v3") # Changed key
-                if recalculate_linkage or 'linkage_matrix' not in st.session_state or st.session_state.linkage_matrix is None:
-                    # ... (keep the linkage calculation logic exactly as it was in the previous version) ...
+                # --- Action Button 1: Calculate Linkage ---
+                if st.button("Calculate/Recalculate Linkage Matrix", key="recalc_linkage_btn_v3"):
                     try:
                         current_method = st.session_state.selected_linkage_method
-                        st.write(f"Performing {current_method.capitalize()} linkage on first {n_components_for_clustering} PCA components...")
+                        st.write(f"Performing {current_method.capitalize()} linkage on first {n_components_for_clustering} PCA components...") # Temp message
                         pca_data_subset_link = st.session_state.pca_data[:, :n_components_for_clustering]
-                        st.session_state.linkage_matrix = linkage(pca_data_subset_link, method=current_method)
-                        distances = st.session_state.linkage_matrix[:, 2]
+
+                        # --- Perform Calculation ---
+                        linkage_matrix_result = linkage(pca_data_subset_link, method=current_method)
+                        st.session_state.linkage_matrix = linkage_matrix_result # Store matrix
+
+                        # --- Calculate Optimal Cut ---
+                        distances = linkage_matrix_result[:, 2]
                         diffs = np.diff(distances)
                         idx_largest_diff = np.argmax(diffs) if len(diffs) > 0 else 0
-                        st.session_state.optimal_y_value = distances[idx_largest_diff] if len(distances) > idx_largest_diff else (distances[-1] if len(distances) > 0 else 0)
-                        st.write("Linkage matrix calculated.")
+                        optimal_y = distances[idx_largest_diff] if len(distances) > idx_largest_diff else (distances[-1] if len(distances) > 0 else 0)
+                        st.session_state.optimal_y_value = optimal_y # Store optimal cut value
+
+                        # --- Generate Dendrogram Figure ---
+                        st.session_state.dendrogram_fig = plot_dendrogram(linkage_matrix_result, optimal_y, current_method) # Store figure
+
+                        st.write("Linkage matrix calculation and dendrogram generation complete.") # Temp message
+
+                        # --- Reset Downstream Cluster Assignment ---
                         st.session_state.hierarchical_done = False
-                        st.session_state.show_dendrogram = False
                         st.session_state.hierarchical_silhouette = None
-                        st.session_state.hierarchical_n_clusters = None
-                        st.session_state.show_hierarchical_tsne_plot = False
+                        # st.session_state.hierarchical_n_clusters = 3 # Keep user's k selection if possible? Or reset? Resetting is safer.
                         st.session_state.hierarchical_labels_for_tsne = None
+                        st.session_state.hierarchical_tsne_fig = None
+
                     except Exception as e:
-                        st.error(f"Error calculating linkage matrix: {e}")
+                        st.error(f"Error calculating linkage matrix or generating dendrogram: {e}")
+                        # Clear results on error
                         st.session_state.linkage_matrix = None
                         st.session_state.optimal_y_value = None
+                        st.session_state.dendrogram_fig = None
+                        st.session_state.hierarchical_done = False # Ensure downstream is blocked
 
-                # --- Display Dendrogram & Select k ---
-                if st.session_state.get('linkage_matrix') is not None:
-                    st.markdown("#### Dendrogram (with suggested distance cut)")
-                    optimal_y = st.session_state.get('optimal_y_value', 0)
-                    linkage_name_for_plot = st.session_state.get('selected_linkage_method', 'Unknown') # Get method used
+                # --- Persistent Display 1: Dendrogram ---
+                if st.session_state.get('linkage_matrix') is not None and st.session_state.get('dendrogram_fig') is not None:
+                    st.markdown("#### Dendrogram")
+                    optimal_y_display = st.session_state.get('optimal_y_value', 0)
+                    st.pyplot(st.session_state.dendrogram_fig, use_container_width=False)
+                    st.caption(f"Method: {st.session_state.get('selected_linkage_method', 'N/A')}. Suggested cut ≈ {optimal_y_display:.2f}.")
 
-                    fig_dendro = plot_dendrogram(st.session_state.linkage_matrix, optimal_y, linkage_name_for_plot)
-                    st.pyplot(fig_dendro, use_container_width=False)
-                    st.caption(f"Red line shows cut based on largest distance jump (Distance ≈ {optimal_y:.2f}). Use this or visual inspection to choose k below.")
-                    st.session_state.show_dendrogram = True
-
+                    # --- K Selection & Cluster Assignment (Only if Dendrogram is shown) ---
+                    st.markdown("---") # Separator before cluster assignment
+                    st.markdown("#### Assign Clusters")
                     default_k_hier = st.session_state.get('hierarchical_n_clusters', 3)
-                    st.session_state.hierarchical_n_clusters = st.number_input(
-                        "Select Desired Number of Clusters (k) for Hierarchical",
-                        min_value=2, max_value=20, value=default_k_hier, step=1,
-                        key="hierarchical_k_selector_input_v2" # Changed key
+                    selected_k_hier = st.number_input(
+                        "Select Desired Number of Clusters (k)", min_value=2, max_value=20,
+                        value=default_k_hier, step=1, key="hierarchical_k_selector_input_v2"
                     )
+                    # Store selection immediately
+                    st.session_state.hierarchical_n_clusters = selected_k_hier
 
-                    # --- Assign Clusters & Calculate Score ---
-                    if st.button(f"Assign Clusters & Calculate Score (k={st.session_state.hierarchical_n_clusters})", key="run_hierarchical_fcluster_exec_btn_v2"): # Changed key
-                        st.session_state.hierarchical_done = False
-                        st.session_state.show_hierarchical_tsne_plot = False # Reset plot display status
-                        st.session_state.hierarchical_labels_for_tsne = None # Reset labels
+                    # --- Action Button 2: Assign Clusters & Score ---
+                    if st.button(f"Assign Clusters & Calculate Score (k={selected_k_hier})", key="run_hierarchical_fcluster_exec_btn_v2"):
                         try:
-                            current_k_hierarchical = st.session_state.hierarchical_n_clusters
-                            st.write(f"Assigning {current_k_hierarchical} clusters using 'maxclust' criterion...")
+                            current_k_hierarchical = selected_k_hier
+                            st.write(f"Assigning {current_k_hierarchical} clusters...") # Temp message
+
+                            # --- Perform Calculation ---
                             cluster_labels_hierarchical = fcluster(st.session_state.linkage_matrix, t=current_k_hierarchical, criterion='maxclust')
                             st.session_state.hierarchical_labels_for_tsne = cluster_labels_hierarchical # Store labels
 
-                            # Calculate Silhouette Score using the same PCA subset used for linkage
-                            pca_data_subset_score = st.session_state.pca_data[:, :n_components_for_clustering]
+                            # --- Calculate Silhouette Score ---
+                            score = None
+                            pca_data_subset_score = st.session_state.pca_data[:, :n_components_for_clustering] # Use same PCA subset
                             if current_k_hierarchical > 1 and len(pca_data_subset_score) >= current_k_hierarchical :
                                 try:
                                     score = silhouette_score(pca_data_subset_score, cluster_labels_hierarchical, metric='euclidean')
-                                    st.session_state.hierarchical_silhouette = score
-                                    st.session_state.hierarchical_done = True # Mark as done only after successful scoring attempt
-                                    st.success(f"Clusters assigned & Silhouette Score calculated for k={current_k_hierarchical}.")
+                                    st.session_state.hierarchical_silhouette = score # Store score
+                                    st.session_state.hierarchical_done = True # Set flag ONLY if score calculation succeeds or is not applicable
+                                    st.write("Silhouette Score calculated.") # Temp message
                                 except ValueError as sil_err:
-                                     st.warning(f"Could not calculate silhouette score: {sil_err}")
-                                     st.session_state.hierarchical_silhouette = None
-                                     st.session_state.hierarchical_done = False # Mark as not done if score fails
+                                    st.warning(f"Could not calculate silhouette score: {sil_err}")
+                                    st.session_state.hierarchical_silhouette = None
+                                    st.session_state.hierarchical_done = False # Mark as not done if score fails
                             else:
-                                 st.warning(f"Silhouette score requires k > 1 and Samples >= k.")
-                                 st.session_state.hierarchical_silhouette = None
-                                 st.session_state.hierarchical_done = False # Mark as not done if score not calculated
+                                st.warning(f"Silhouette score requires k > 1 and Samples >= k.")
+                                st.session_state.hierarchical_silhouette = None
+                                st.session_state.hierarchical_done = True # Still mark done if score just wasn't applicable
 
-                             # DO NOT generate t-SNE plot here automatically anymore
+                            # --- Reset t-SNE Viz ---
+                            st.session_state.hierarchical_tsne_fig = None # Clear viz figure if k changes
+
+                            # --- No display inside button block ---
 
                         except Exception as e:
-                             st.error(f"Error assigning clusters or calculating score: {e}")
-                             st.session_state.hierarchical_done = False
-                             st.session_state.hierarchical_silhouette = None
-                             st.session_state.hierarchical_labels_for_tsne = None
+                            st.error(f"Error assigning clusters or calculating score: {e}")
+                            st.session_state.hierarchical_done = False
+                            st.session_state.hierarchical_silhouette = None
+                            st.session_state.hierarchical_labels_for_tsne = None
 
-                     # --- Display Silhouette Score ---
-                    if st.session_state.get('hierarchical_done'): # Only show if assignment/scoring succeeded for the current k
-                         k_hier_for_score = st.session_state.hierarchical_n_clusters # Use k selected when score was calc'd
-                         if st.session_state.get('hierarchical_silhouette') is not None:
-                             st.metric(label=f"Silhouette Score (Hierarchical, k={k_hier_for_score})",
-                                       value=f"{st.session_state.hierarchical_silhouette:.3f}")
+                    # --- Persistent Display 2: Silhouette Score ---
+                    if st.session_state.get('hierarchical_done'): # Check if assignment was attempted/done
+                        k_hier_for_score = st.session_state.get('hierarchical_n_clusters', 'N/A') # k used for last successful assignment
+                        score_value = st.session_state.get('hierarchical_silhouette')
+                        if score_value is not None:
+                            st.metric(label=f"Silhouette Score (Hierarchical, k={k_hier_for_score})",
+                                    value=f"{score_value:.3f}")
+                        # else: # Optional: Message if score couldn't be calculated but assignment was done
+                            # st.info("Silhouette score could not be calculated for the selected k.")
 
-                    st.markdown("---") # Separator
+                        # --- Visualize Hierarchical Clusters on t-SNE (Only if assignment done) ---
+                        st.markdown("---") # Separator before viz
+                        st.markdown("#### Visualize Clusters on t-SNE")
+                        # Check prerequisites for visualization
+                        can_show_hier_tsne = (st.session_state.get('tsne_done', False) and
+                                            st.session_state.get('hierarchical_labels_for_tsne') is not None)
 
-                     # --- Button to Show Hierarchical Clusters on t-SNE ---
-                    st.markdown("#### Visualize Hierarchical Clusters on t-SNE")
-                     # Enable button only if clusters are assigned AND t-SNE is done
-                    can_show_hier_tsne = st.session_state.get('hierarchical_done', False) and \
-                                        st.session_state.get('tsne_done', False) and \
-                                        st.session_state.get('tsne_data') is not None and \
-                                        st.session_state.get('hierarchical_labels_for_tsne') is not None
+                        if not st.session_state.get('tsne_done', False):
+                            st.info("Run t-SNE (Step 4) first to enable this visualization.")
+                        elif st.session_state.get('hierarchical_labels_for_tsne') is None: # Check labels exist from assignment step
+                            st.info("Assign Hierarchical Clusters (using the button above) first.")
 
-                    if not st.session_state.get('tsne_done', False):
-                        st.info("Run t-SNE (Step 5) first to enable this visualization.")
-                    elif not st.session_state.get('hierarchical_done', False):
-                        st.info("Assign Hierarchical Clusters (using the button above) first to enable this visualization.")
+                        # --- Action Button 3: Generate t-SNE Viz ---
+                        if st.button("Generate/Update Hierarchical t-SNE Plot", key="show_hier_tsne_plot_btn", disabled=not can_show_hier_tsne):
+                            try:
+                                st.write("Generating t-SNE plot colored by hierarchical clusters...") # Temp message
+                                current_k_hier_viz = st.session_state.get('hierarchical_n_clusters', 'N/A')
+                                # --- Generate Plot ---
+                                st.session_state.hierarchical_tsne_fig = plot_hierarchical_on_tsne(
+                                    st.session_state.tsne_data,
+                                    st.session_state.hierarchical_labels_for_tsne,
+                                    current_k_hier_viz
+                                ) # Store figure
+                            except Exception as e:
+                                st.error(f"Failed to generate hierarchical t-SNE plot: {e}")
+                                st.session_state.hierarchical_tsne_fig = None
 
-                    if st.button("Show Plot", key="show_hier_tsne_plot_btn", disabled=not can_show_hier_tsne):
-                        try:
-                             st.write("Generating t-SNE plot colored by hierarchical clusters...")
-                             current_k_hier = st.session_state.hierarchical_n_clusters # k used for labels
-                             st.session_state.hierarchical_tsne_fig = plot_hierarchical_on_tsne(
-                                 st.session_state.tsne_data,
-                                 st.session_state.hierarchical_labels_for_tsne,
-                                 current_k_hier
-                             )
-                             st.session_state.show_hierarchical_tsne_plot = True # Show plot now
-                        except Exception as e:
-                             st.error(f"Failed to generate hierarchical t-SNE plot: {e}")
-                             st.session_state.show_hierarchical_tsne_plot = False
+                        # --- Persistent Display 3: t-SNE Viz ---
+                        if st.session_state.get('hierarchical_tsne_fig') is not None:
+                            st.pyplot(st.session_state.hierarchical_tsne_fig, use_container_width=False)
+                            # Optionally add hide button
+                            # if st.button("Hide Hierarchical t-SNE Plot", key="hide_hier_tsne_btn_v2"):
+                            #      st.session_state.hierarchical_tsne_fig = None
+                            #      st.rerun()
 
-                     # --- Display Hierarchical Clusters on t-SNE Plot ---
-                    if st.session_state.get('show_hierarchical_tsne_plot', False):
-                          if st.session_state.hierarchical_tsne_fig:
-                              st.pyplot(st.session_state.hierarchical_tsne_fig, use_container_width=False)
-                              if st.button("Hide Hierarchical t-SNE Plot", key="hide_hier_tsne_btn_v2"): # Changed key
-                                   st.session_state.show_hierarchical_tsne_plot = False
-                                   st.rerun()
-                          else:
-                              st.warning("Could not generate hierarchical t-SNE plot.")
-                              st.session_state.show_hierarchical_tsne_plot = False
+                else: # Linkage matrix not calculated or failed
+                    st.info("Calculate Linkage Matrix first using the button above.")
 
-                else: # Linkage matrix not calculated
-                     st.info("Calculate Linkage Matrix first using the button above.")
-
-             else: # PCA data not available
-                 st.warning("PCA results (Step 3) not found.")
+            else: # PCA data not available
+                st.warning("PCA results (`pca_data`) not found.")
         else: # PCA not done
-             st.info("Run PCA (Step 3) first.")
+            st.info("Run PCA (Step 3) first.")
         st.markdown("---") # Separator after step
 
 
-
-                # --- Step 6: K-Means Clustering (on t-SNE results) ---
-        st.subheader("Step 6: K-Means Clustering (on t-SNE results)")
+        # --- Step 6: K-Means Clustering (on t-SNE results) ---
+        st.subheader("Step 6: K-Means Clustering")
         if st.session_state.get('tsne_done', False):
             if st.session_state.tsne_data is not None:
-                 st.session_state.n_clusters = st.number_input("Select Number of Clusters (k)", min_value=2, max_value=20, value=st.session_state.get('n_clusters', 5), step=1, key="kmeans_k_selector")
+                # K Selection Input
+                selected_k_kmeans = st.number_input("Select Number of K-Means Clusters (k)", min_value=2, max_value=20,
+                                                value=st.session_state.get('n_clusters', 5), step=1, key="kmeans_k_selector")
+                # Store selection immediately
+                st.session_state.n_clusters = selected_k_kmeans
 
-                 if st.button(f"Run K-Means (k={st.session_state.n_clusters})", key="run_kmeans_btn"):
-                     try:
-                         current_k = st.session_state.n_clusters
-                         st.write(f"Running K-Means with k={current_k} on t-SNE results...")
-                         kmeans = KMeans(n_clusters=current_k,
-                                         random_state=42,
-                                         n_init='auto')
-                         labels = kmeans.fit_predict(st.session_state.tsne_data)
-                         st.session_state.kmeans_labels = labels
+                # --- Action Button ---
+                if st.button(f"Run K-Means (k={selected_k_kmeans})", key="run_kmeans_btn"):
+                    try:
+                        current_k = selected_k_kmeans
+                        st.write(f"Running K-Means with k={current_k} on t-SNE results...") # Temp message
 
-                         # --- Calculate Silhouette Score ---
-                         if current_k > 1 and len(st.session_state.tsne_data) > current_k: # Check if calculation is possible
-                             try:
+                        # --- Perform Calculation ---
+                        kmeans = KMeans(n_clusters=current_k, random_state=42, n_init='auto')
+                        labels = kmeans.fit_predict(st.session_state.tsne_data)
+                        st.session_state.kmeans_labels = labels # Store labels
+
+                        # --- Calculate Silhouette Score ---
+                        score = None
+                        if current_k > 1 and len(st.session_state.tsne_data) >= current_k:
+                            try:
                                 score = silhouette_score(st.session_state.tsne_data, labels, metric='euclidean')
-                                st.session_state.kmeans_silhouette = score
-                                st.write(f"Calculated Silhouette Score.")
-                             except ValueError as sil_err:
-                                 st.warning(f"Could not calculate silhouette score: {sil_err}")
-                                 st.session_state.kmeans_silhouette = None
-                         else:
-                             st.warning(f"Silhouette score requires at least 2 clusters and more samples than clusters.")
-                             st.session_state.kmeans_silhouette = None
-                         # --- End Silhouette Calculation ---
+                                st.session_state.kmeans_silhouette = score # Store score
+                                st.write(f"Calculated Silhouette Score.") # Temp message
+                            except ValueError as sil_err:
+                                st.warning(f"Could not calculate K-Means silhouette score: {sil_err}")
+                                st.session_state.kmeans_silhouette = None
+                        else:
+                            st.warning(f"Silhouette score requires k > 1 and Samples >= k.")
+                            st.session_state.kmeans_silhouette = None
 
-                         st.session_state.kmeans_plot_fig = plot_kmeans_clusters(st.session_state.tsne_data, labels, current_k)
-                         st.session_state.kmeans_done = True
-                         st.session_state.show_kmeans_plot = True
-                         st.success("K-Means clustering complete.")
+                        # --- Generate Plot ---
+                        st.session_state.kmeans_plot_fig = plot_kmeans_clusters(st.session_state.tsne_data, labels, current_k) # Store figure
 
-                     except Exception as e:
-                         st.error(f"Error during K-Means: {e}")
-                         st.session_state.kmeans_done = False
-                         st.session_state.show_kmeans_plot = False
-                         st.session_state.kmeans_silhouette = None # Clear score on error
+                        # --- Set Status Flag ---
+                        st.session_state.kmeans_done = True
 
-                 # Display Area for K-Means Plot and Score (within Step 6)
-                 if st.session_state.get('show_kmeans_plot', False):
-                     k_used_for_plot = len(np.unique(st.session_state.kmeans_labels)) if st.session_state.kmeans_labels is not None else st.session_state.n_clusters
-                     st.markdown(f"#### K-Means Clustering Plot (k={k_used_for_plot})")
-                     if st.session_state.kmeans_plot_fig:
-                         st.pyplot(st.session_state.kmeans_plot_fig, use_container_width=False)
-                         # Display silhouette score if available
-                         if st.session_state.get('kmeans_silhouette') is not None:
-                              st.metric(label=f"Silhouette Score (k={k_used_for_plot})",
-                                        value=f"{st.session_state.kmeans_silhouette:.3f}")
+                        # --- No display inside button block ---
 
-                         if st.button("Hide K-Means Plot", key="hide_kmeans_btn_inline"):
-                             st.session_state.show_kmeans_plot = False
-                             st.session_state.kmeans_silhouette = None # Hide score when hiding plot
-                             st.rerun()
-                     else:
-                         st.warning("Could not generate K-Means plot.")
-                         st.session_state.show_kmeans_plot = False
-                         st.session_state.kmeans_silhouette = None
+                    except Exception as e:
+                        st.error(f"Error during K-Means: {e}")
+                        st.session_state.kmeans_done = False
+                        # Clear results on error
+                        st.session_state.kmeans_labels = None
+                        st.session_state.kmeans_silhouette = None
+                        st.session_state.kmeans_plot_fig = None
 
             else:
-                 st.warning("t-SNE results not found.")
+                st.warning("t-SNE results (`tsne_data`) not found.")
+
+            # --- Persistent Display Area for Step 6 ---
+            if st.session_state.get('kmeans_done', False):
+                st.success("K-Means clustering complete.")
+                k_used_for_plot = len(np.unique(st.session_state.kmeans_labels)) if st.session_state.kmeans_labels is not None else st.session_state.n_clusters
+                st.markdown(f"#### K-Means Results (k={k_used_for_plot})")
+
+                # Display plot if figure exists
+                if st.session_state.kmeans_plot_fig:
+                    st.pyplot(st.session_state.kmeans_plot_fig, use_container_width=False)
+
+                # Display silhouette score if it exists
+                score_value_kmeans = st.session_state.get('kmeans_silhouette')
+                if score_value_kmeans is not None:
+                    st.metric(label=f"Silhouette Score (K-Means, k={k_used_for_plot})",
+                            value=f"{score_value_kmeans:.3f}")
+                # else: # Optional message if score couldn't be calculated
+                    # st.info("Silhouette score could not be calculated for K-Means.")
+
+                # Optionally add hide button
+                # if st.button("Hide K-Means Results", key="hide_kmeans_btn_inline"):
+                #     st.session_state.kmeans_done = False # Set flag to false to hide
+                #     st.session_state.kmeans_plot_fig = None # Clear figure
+                #     st.session_state.kmeans_silhouette = None # Clear score
+                #     st.rerun()
+
         else:
-             st.info("Run t-SNE (Step 5) first.")
+            st.info("Run t-SNE (Step 4) first.")
+        # No final separator needed here as it's the end of the expander
         # No final separator needed here as it's the end of the expander
     
 
