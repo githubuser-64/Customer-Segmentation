@@ -2922,15 +2922,6 @@ if st.session_state.data is not None:
                         st.write(f"*Top driving features (XGBoost):* `{', '.join(important_features)}`")
 
                         # Calculate overall medians/means safely
-                        # Ensure the column name variable exists AND the column is in the DataFrame
-                        overall_median_income = hier_broad_summary[income_col_insight].median() if income_col_insight in hier_broad_summary.columns else None
-                        overall_median_recency = hier_broad_summary[recency_col_insight].median() if recency_col_insight in hier_broad_summary.columns else None
-                    if xgb_trained and feature_importance_df is not None and hier_broad_summary is not None and not hier_broad_summary.empty: # Check summary exists
-                        st.markdown("**Campaign Suggestions (Hierarchical - Broad):**")
-                        important_features = feature_importance_df['Feature'].head(5).tolist()
-                        st.write(f"*Top driving features (XGBoost):* `{', '.join(important_features)}`")
-
-                        # Calculate overall medians/means safely
                         overall_median_income = hier_broad_summary[income_col_insight].median() if income_col_insight in hier_broad_summary.columns else None
                         overall_median_recency = hier_broad_summary[recency_col_insight].median() if recency_col_insight in hier_broad_summary.columns else None
                         overall_median_frequency = hier_broad_summary[frequency_col_insight].median() if frequency_col_insight in hier_broad_summary.columns else None # Added
