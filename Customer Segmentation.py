@@ -756,13 +756,14 @@ def plot_pca_scree_plot(data):
 
 
 # --- New Plotting Functions ---
-def plot_dendrogram(linkage_matrix, optimal_y_value):
+def plot_dendrogram(linkage_matrix, optimal_y_value, linkage_method_name): # Added linkage_method_name parameter
     """Generates a dendrogram plot and returns the Figure object."""
     fig, ax = plt.subplots(figsize=(8, 4)) # Adjusted size
     dendrogram(linkage_matrix, ax=ax)
     ax.set_title('Dendrogram for Hierarchical Clustering')
     ax.set_xlabel('Data Points (or Clusters)')
-    ax.set_ylabel('Distance (Ward Linkage)')
+    # Use the passed linkage method name in the label
+    ax.set_ylabel(f'Distance ({linkage_method_name.capitalize()} Linkage)')
     ax.axhline(y=optimal_y_value, color='r', linestyle='--', label=f'Optimal Cut ({optimal_y_value:.2f})')
     ax.legend()
     plt.tight_layout()
@@ -2045,149 +2046,9 @@ if st.session_state.data is not None:
             st.info("Remove outliers (Step 2) first.")
         st.markdown("---") # Separator after step
 
-        # --- Step 4: Hierarchical Clustering (Dendrogram & Cluster Selection) ---
-        st.subheader("Step 4: Hierarchical Clustering (Dendrogram & Cluster Selection)")
-        if st.session_state.get('pca_done', False):
-             if st.session_state.pca_data is not None:
-                 max_pca_components = st.session_state.pca_data.shape[1]
-                 default_hier_comps = min(10, max_pca_components)
-                 n_components_for_clustering = st.slider("Number of PCA Components for Hierarchical Clustering", 2, max_pca_components, default_hier_comps, 1, key="pca_comps_hierarchical_slider_v2") # Changed key
-
-                 # --- Calculate Linkage ---
-                 recalculate_linkage = st.button("Recalculate Linkage Matrix", key="recalc_linkage_btn_v3") # Changed key
-                 if recalculate_linkage or 'linkage_matrix' not in st.session_state or st.session_state.linkage_matrix is None:
-                     # ... (keep the linkage calculation logic exactly as it was in the previous version) ...
-                     try:
-                         st.write(f"Performing Ward linkage on first {n_components_for_clustering} PCA components...")
-                         pca_data_subset_link = st.session_state.pca_data[:, :n_components_for_clustering]
-                         st.session_state.linkage_matrix = linkage(pca_data_subset_link, method='ward')
-                         distances = st.session_state.linkage_matrix[:, 2]
-                         diffs = np.diff(distances)
-                         idx_largest_diff = np.argmax(diffs) if len(diffs) > 0 else 0
-                         st.session_state.optimal_y_value = distances[idx_largest_diff] if len(distances) > idx_largest_diff else (distances[-1] if len(distances) > 0 else 0)
-                         st.write("Linkage matrix calculated.")
-                         st.session_state.hierarchical_done = False
-                         st.session_state.show_dendrogram = False
-                         st.session_state.hierarchical_silhouette = None
-                         st.session_state.hierarchical_n_clusters = None
-                         st.session_state.show_hierarchical_tsne_plot = False
-                         st.session_state.hierarchical_labels_for_tsne = None
-                     except Exception as e:
-                         st.error(f"Error calculating linkage matrix: {e}")
-                         st.session_state.linkage_matrix = None
-                         st.session_state.optimal_y_value = None
-
-                 # --- Display Dendrogram & Select k ---
-                 if st.session_state.get('linkage_matrix') is not None:
-                     st.markdown("#### Dendrogram (with suggested distance cut)")
-                     optimal_y = st.session_state.get('optimal_y_value', 0)
-                     fig_dendro = plot_dendrogram(st.session_state.linkage_matrix, optimal_y)
-                     st.pyplot(fig_dendro, use_container_width=False)
-                     st.caption(f"Red line shows cut based on largest distance jump (Distance ≈ {optimal_y:.2f}). Use this or visual inspection to choose k below.")
-                     st.session_state.show_dendrogram = True
-
-                     default_k_hier = st.session_state.get('hierarchical_n_clusters', 3)
-                     st.session_state.hierarchical_n_clusters = st.number_input(
-                         "Select Desired Number of Clusters (k) for Hierarchical",
-                         min_value=2, max_value=20, value=default_k_hier, step=1,
-                         key="hierarchical_k_selector_input_v2" # Changed key
-                     )
-
-                     # --- Assign Clusters & Calculate Score ---
-                     if st.button(f"Assign Clusters & Calculate Score (k={st.session_state.hierarchical_n_clusters})", key="run_hierarchical_fcluster_exec_btn_v2"): # Changed key
-                         st.session_state.hierarchical_done = False
-                         st.session_state.show_hierarchical_tsne_plot = False # Reset plot display status
-                         st.session_state.hierarchical_labels_for_tsne = None # Reset labels
-                         try:
-                             current_k_hierarchical = st.session_state.hierarchical_n_clusters
-                             st.write(f"Assigning {current_k_hierarchical} clusters using 'maxclust' criterion...")
-                             cluster_labels_hierarchical = fcluster(st.session_state.linkage_matrix, t=current_k_hierarchical, criterion='maxclust')
-                             st.session_state.hierarchical_labels_for_tsne = cluster_labels_hierarchical # Store labels
-
-                             # Calculate Silhouette Score using the same PCA subset used for linkage
-                             pca_data_subset_score = st.session_state.pca_data[:, :n_components_for_clustering]
-                             if current_k_hierarchical > 1 and len(pca_data_subset_score) >= current_k_hierarchical :
-                                 try:
-                                    score = silhouette_score(pca_data_subset_score, cluster_labels_hierarchical, metric='euclidean')
-                                    st.session_state.hierarchical_silhouette = score
-                                    st.session_state.hierarchical_done = True # Mark as done only after successful scoring attempt
-                                    st.success(f"Clusters assigned & Silhouette Score calculated for k={current_k_hierarchical}.")
-                                 except ValueError as sil_err:
-                                     st.warning(f"Could not calculate silhouette score: {sil_err}")
-                                     st.session_state.hierarchical_silhouette = None
-                                     st.session_state.hierarchical_done = False # Mark as not done if score fails
-                             else:
-                                 st.warning(f"Silhouette score requires k > 1 and Samples >= k.")
-                                 st.session_state.hierarchical_silhouette = None
-                                 st.session_state.hierarchical_done = False # Mark as not done if score not calculated
-
-                             # DO NOT generate t-SNE plot here automatically anymore
-
-                         except Exception as e:
-                             st.error(f"Error assigning clusters or calculating score: {e}")
-                             st.session_state.hierarchical_done = False
-                             st.session_state.hierarchical_silhouette = None
-                             st.session_state.hierarchical_labels_for_tsne = None
-
-                     # --- Display Silhouette Score ---
-                     if st.session_state.get('hierarchical_done'): # Only show if assignment/scoring succeeded for the current k
-                         k_hier_for_score = st.session_state.hierarchical_n_clusters # Use k selected when score was calc'd
-                         if st.session_state.get('hierarchical_silhouette') is not None:
-                             st.metric(label=f"Silhouette Score (Hierarchical, k={k_hier_for_score})",
-                                       value=f"{st.session_state.hierarchical_silhouette:.3f}")
-
-                     st.markdown("---") # Separator
-
-                     # --- Button to Show Hierarchical Clusters on t-SNE ---
-                     st.markdown("#### Visualize Hierarchical Clusters on t-SNE")
-                     # Enable button only if clusters are assigned AND t-SNE is done
-                     can_show_hier_tsne = st.session_state.get('hierarchical_done', False) and \
-                                          st.session_state.get('tsne_done', False) and \
-                                          st.session_state.get('tsne_data') is not None and \
-                                          st.session_state.get('hierarchical_labels_for_tsne') is not None
-
-                     if not st.session_state.get('tsne_done', False):
-                         st.info("Run t-SNE (Step 5) first to enable this visualization.")
-                     elif not st.session_state.get('hierarchical_done', False):
-                         st.info("Assign Hierarchical Clusters (using the button above) first to enable this visualization.")
-
-                     if st.button("Show Plot", key="show_hier_tsne_plot_btn", disabled=not can_show_hier_tsne):
-                         try:
-                             st.write("Generating t-SNE plot colored by hierarchical clusters...")
-                             current_k_hier = st.session_state.hierarchical_n_clusters # k used for labels
-                             st.session_state.hierarchical_tsne_fig = plot_hierarchical_on_tsne(
-                                 st.session_state.tsne_data,
-                                 st.session_state.hierarchical_labels_for_tsne,
-                                 current_k_hier
-                             )
-                             st.session_state.show_hierarchical_tsne_plot = True # Show plot now
-                         except Exception as e:
-                             st.error(f"Failed to generate hierarchical t-SNE plot: {e}")
-                             st.session_state.show_hierarchical_tsne_plot = False
-
-                     # --- Display Hierarchical Clusters on t-SNE Plot ---
-                     if st.session_state.get('show_hierarchical_tsne_plot', False):
-                          if st.session_state.hierarchical_tsne_fig:
-                              st.pyplot(st.session_state.hierarchical_tsne_fig, use_container_width=False)
-                              if st.button("Hide Hierarchical t-SNE Plot", key="hide_hier_tsne_btn_v2"): # Changed key
-                                   st.session_state.show_hierarchical_tsne_plot = False
-                                   st.rerun()
-                          else:
-                              st.warning("Could not generate hierarchical t-SNE plot.")
-                              st.session_state.show_hierarchical_tsne_plot = False
-
-                 else: # Linkage matrix not calculated
-                     st.info("Calculate Linkage Matrix first using the button above.")
-
-             else: # PCA data not available
-                 st.warning("PCA results (Step 3) not found.")
-        else: # PCA not done
-             st.info("Run PCA (Step 3) first.")
-        st.markdown("---") # Separator after step
-
-
+        
         # --- Step 5: t-SNE Visualization ---
-        st.subheader("Step 5: t-SNE Visualization")
+        st.subheader("Step 4: t-SNE Visualization")
         if st.session_state.get('pca_done', False):
              if st.session_state.pca_data is not None:
                  max_pca_components_tsne = st.session_state.pca_data.shape[1]
@@ -2237,6 +2098,166 @@ if st.session_state.data is not None:
         else:
             st.info("Run PCA (Step 3) first.")
         st.markdown("---") # Separator after step
+
+        # --- Step 4: Hierarchical Clustering (Dendrogram & Cluster Selection) ---
+        st.subheader("Step 5: Hierarchical Clustering (Dendrogram & Cluster Selection)")
+        if st.session_state.get('pca_done', False):
+             if st.session_state.pca_data is not None:
+                max_pca_components = st.session_state.pca_data.shape[1]
+                default_hier_comps = min(10, max_pca_components)
+                n_components_for_clustering = st.slider("Number of PCA Components for Hierarchical Clustering", 2, max_pca_components, default_hier_comps, 1, key="pca_comps_hierarchical_slider_v2") # Changed key
+
+                # --- Add Selectbox for Linkage Method ---
+                linkage_options = ['ward', 'complete', 'average', 'single']
+                # Initialize session state if it doesn't exist
+                if 'selected_linkage_method' not in st.session_state:
+                    st.session_state.selected_linkage_method = 'ward' # Default
+
+                selected_method = st.selectbox(
+                    "Select Linkage Method:",
+                    options=linkage_options,
+                    index=linkage_options.index(st.session_state.selected_linkage_method), # Set default based on state
+                    key="linkage_method_selector"
+                )
+                # Update session state when selection changes (selectbox handles this automatically)
+                st.session_state.selected_linkage_method = selected_method
+                # ----------------------------------------
+
+                # --- Calculate Linkage ---
+                recalculate_linkage = st.button("Recalculate Linkage Matrix", key="recalc_linkage_btn_v3") # Changed key
+                if recalculate_linkage or 'linkage_matrix' not in st.session_state or st.session_state.linkage_matrix is None:
+                    # ... (keep the linkage calculation logic exactly as it was in the previous version) ...
+                    try:
+                        current_method = st.session_state.selected_linkage_method
+                        st.write(f"Performing {current_method.capitalize()} linkage on first {n_components_for_clustering} PCA components...")
+                        pca_data_subset_link = st.session_state.pca_data[:, :n_components_for_clustering]
+                        st.session_state.linkage_matrix = linkage(pca_data_subset_link, method='ward')
+                        distances = st.session_state.linkage_matrix[:, 2]
+                        diffs = np.diff(distances)
+                        idx_largest_diff = np.argmax(diffs) if len(diffs) > 0 else 0
+                        st.session_state.optimal_y_value = distances[idx_largest_diff] if len(distances) > idx_largest_diff else (distances[-1] if len(distances) > 0 else 0)
+                        st.write("Linkage matrix calculated.")
+                        st.session_state.hierarchical_done = False
+                        st.session_state.show_dendrogram = False
+                        st.session_state.hierarchical_silhouette = None
+                        st.session_state.hierarchical_n_clusters = None
+                        st.session_state.show_hierarchical_tsne_plot = False
+                        st.session_state.hierarchical_labels_for_tsne = None
+                    except Exception as e:
+                        st.error(f"Error calculating linkage matrix: {e}")
+                        st.session_state.linkage_matrix = None
+                        st.session_state.optimal_y_value = None
+
+                # --- Display Dendrogram & Select k ---
+                if st.session_state.get('linkage_matrix') is not None:
+                    st.markdown("#### Dendrogram (with suggested distance cut)")
+                    optimal_y = st.session_state.get('optimal_y_value', 0)
+                    linkage_name_for_plot = st.session_state.get('selected_linkage_method', 'Unknown') # Get method used
+
+                    fig_dendro = plot_dendrogram(st.session_state.linkage_matrix, optimal_y, linkage_name_for_plot)
+                    st.pyplot(fig_dendro, use_container_width=False)
+                    st.caption(f"Red line shows cut based on largest distance jump (Distance ≈ {optimal_y:.2f}). Use this or visual inspection to choose k below.")
+                    st.session_state.show_dendrogram = True
+
+                    default_k_hier = st.session_state.get('hierarchical_n_clusters', 3)
+                    st.session_state.hierarchical_n_clusters = st.number_input(
+                        "Select Desired Number of Clusters (k) for Hierarchical",
+                        min_value=2, max_value=20, value=default_k_hier, step=1,
+                        key="hierarchical_k_selector_input_v2" # Changed key
+                    )
+
+                    # --- Assign Clusters & Calculate Score ---
+                    if st.button(f"Assign Clusters & Calculate Score (k={st.session_state.hierarchical_n_clusters})", key="run_hierarchical_fcluster_exec_btn_v2"): # Changed key
+                        st.session_state.hierarchical_done = False
+                        st.session_state.show_hierarchical_tsne_plot = False # Reset plot display status
+                        st.session_state.hierarchical_labels_for_tsne = None # Reset labels
+                        try:
+                            current_k_hierarchical = st.session_state.hierarchical_n_clusters
+                            st.write(f"Assigning {current_k_hierarchical} clusters using 'maxclust' criterion...")
+                            cluster_labels_hierarchical = fcluster(st.session_state.linkage_matrix, t=current_k_hierarchical, criterion='maxclust')
+                            st.session_state.hierarchical_labels_for_tsne = cluster_labels_hierarchical # Store labels
+
+                            # Calculate Silhouette Score using the same PCA subset used for linkage
+                            pca_data_subset_score = st.session_state.pca_data[:, :n_components_for_clustering]
+                            if current_k_hierarchical > 1 and len(pca_data_subset_score) >= current_k_hierarchical :
+                                try:
+                                    score = silhouette_score(pca_data_subset_score, cluster_labels_hierarchical, metric='euclidean')
+                                    st.session_state.hierarchical_silhouette = score
+                                    st.session_state.hierarchical_done = True # Mark as done only after successful scoring attempt
+                                    st.success(f"Clusters assigned & Silhouette Score calculated for k={current_k_hierarchical}.")
+                                except ValueError as sil_err:
+                                     st.warning(f"Could not calculate silhouette score: {sil_err}")
+                                     st.session_state.hierarchical_silhouette = None
+                                     st.session_state.hierarchical_done = False # Mark as not done if score fails
+                            else:
+                                 st.warning(f"Silhouette score requires k > 1 and Samples >= k.")
+                                 st.session_state.hierarchical_silhouette = None
+                                 st.session_state.hierarchical_done = False # Mark as not done if score not calculated
+
+                             # DO NOT generate t-SNE plot here automatically anymore
+
+                        except Exception as e:
+                             st.error(f"Error assigning clusters or calculating score: {e}")
+                             st.session_state.hierarchical_done = False
+                             st.session_state.hierarchical_silhouette = None
+                             st.session_state.hierarchical_labels_for_tsne = None
+
+                     # --- Display Silhouette Score ---
+                    if st.session_state.get('hierarchical_done'): # Only show if assignment/scoring succeeded for the current k
+                         k_hier_for_score = st.session_state.hierarchical_n_clusters # Use k selected when score was calc'd
+                         if st.session_state.get('hierarchical_silhouette') is not None:
+                             st.metric(label=f"Silhouette Score (Hierarchical, k={k_hier_for_score})",
+                                       value=f"{st.session_state.hierarchical_silhouette:.3f}")
+
+                    st.markdown("---") # Separator
+
+                     # --- Button to Show Hierarchical Clusters on t-SNE ---
+                    st.markdown("#### Visualize Hierarchical Clusters on t-SNE")
+                     # Enable button only if clusters are assigned AND t-SNE is done
+                    can_show_hier_tsne = st.session_state.get('hierarchical_done', False) and \
+                                        st.session_state.get('tsne_done', False) and \
+                                        st.session_state.get('tsne_data') is not None and \
+                                        st.session_state.get('hierarchical_labels_for_tsne') is not None
+
+                    if not st.session_state.get('tsne_done', False):
+                        st.info("Run t-SNE (Step 5) first to enable this visualization.")
+                    elif not st.session_state.get('hierarchical_done', False):
+                        st.info("Assign Hierarchical Clusters (using the button above) first to enable this visualization.")
+
+                    if st.button("Show Plot", key="show_hier_tsne_plot_btn", disabled=not can_show_hier_tsne):
+                        try:
+                             st.write("Generating t-SNE plot colored by hierarchical clusters...")
+                             current_k_hier = st.session_state.hierarchical_n_clusters # k used for labels
+                             st.session_state.hierarchical_tsne_fig = plot_hierarchical_on_tsne(
+                                 st.session_state.tsne_data,
+                                 st.session_state.hierarchical_labels_for_tsne,
+                                 current_k_hier
+                             )
+                             st.session_state.show_hierarchical_tsne_plot = True # Show plot now
+                        except Exception as e:
+                             st.error(f"Failed to generate hierarchical t-SNE plot: {e}")
+                             st.session_state.show_hierarchical_tsne_plot = False
+
+                     # --- Display Hierarchical Clusters on t-SNE Plot ---
+                    if st.session_state.get('show_hierarchical_tsne_plot', False):
+                          if st.session_state.hierarchical_tsne_fig:
+                              st.pyplot(st.session_state.hierarchical_tsne_fig, use_container_width=False)
+                              if st.button("Hide Hierarchical t-SNE Plot", key="hide_hier_tsne_btn_v2"): # Changed key
+                                   st.session_state.show_hierarchical_tsne_plot = False
+                                   st.rerun()
+                          else:
+                              st.warning("Could not generate hierarchical t-SNE plot.")
+                              st.session_state.show_hierarchical_tsne_plot = False
+
+                else: # Linkage matrix not calculated
+                     st.info("Calculate Linkage Matrix first using the button above.")
+
+             else: # PCA data not available
+                 st.warning("PCA results (Step 3) not found.")
+        else: # PCA not done
+             st.info("Run PCA (Step 3) first.")
+        st.markdown("---") # Separator after step
+
 
 
                 # --- Step 6: K-Means Clustering (on t-SNE results) ---
@@ -2611,16 +2632,15 @@ if st.session_state.data is not None:
                 age_col_insight = 'Age_On_Last_Enrollment_Date'
 
         # Core metrics (always include if available)
-        core_cols = [col for col in [age_col_insight, 'Income', 'Recency'] if col is not None]
+        broad_cols = [col for col in [age_col_insight, 'Income', 'Recency','Frequency','Monetary','NumAcceptedCmps'] if col is not None]
         # Aggregate metrics for Broad view
-        broad_agg_cols = ['Frequency', 'Monetary', 'NumAcceptedCmps']
         # Component metrics for Detailed view
         freq_components = ['NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumDealsPurchases']
         monetary_components = ['MntWines', 'MntFruits','MntMeatProducts', 'MntFishProducts', 'MntSweetProducts','MntGoldProds']
         campaign_components = ['AcceptedCmp1','AcceptedCmp2','AcceptedCmp3','AcceptedCmp4','AcceptedCmp5','Response']
 
         # All potential columns for detailed view selector
-        all_detailed_cols = core_cols + broad_agg_cols + freq_components + monetary_components + campaign_components
+        all_detailed_cols = broad_cols + freq_components + monetary_components + campaign_components
 
         # --- Helper function for Aggregation ---
         def get_cluster_summary(data_with_labels, cluster_col_name, columns_to_agg):
@@ -2630,7 +2650,7 @@ if st.session_state.data is not None:
 
             for col in valid_columns:
                 # Use median for potentially skewed core metrics, mean for others
-                agg_func = 'median' if col in core_cols else 'mean'
+                agg_func = 'median' if col in broad_cols else 'mean'
                 agg_dict_named[col] = pd.NamedAgg(column=col, aggfunc=agg_func)
 
             # Add Size
@@ -2704,19 +2724,22 @@ if st.session_state.data is not None:
         with tab1:
             st.subheader("Broad Cluster Profiles & Strategies")
             st.caption(f"Aggregated profiles based on key metrics ({index_source_caption if index_source_df is not None else ''})")
+            # Columns for Campaign Suggestions (using broad summary)
+            income_col_insight = 'Income'
+            recency_col_insight = 'Recency'
+            frequency_col_insight = 'Frequency'
+            monetary_col_insight = 'Recency'
+            
 
             # --- Broad Hierarchical ---
             st.markdown("---")
             st.markdown("#### Hierarchical Clustering (Broad)")
             if data_hier_insights is not None:
-                cols_for_broad = core_cols + broad_agg_cols
+                cols_for_broad = broad_cols
                 hier_broad_summary = get_cluster_summary(data_hier_insights, 'Hierarchical_Cluster', cols_for_broad)
                 if not hier_broad_summary.empty:
                     st.dataframe(hier_broad_summary.style.format("{:,.1f}").background_gradient(cmap='viridis', axis=0))
                     # Campaign Suggestions (using broad summary)
-                    # --- Re-define key column names here for safety ---
-                    income_col_insight = 'Income'
-                    recency_col_insight = 'Recency'
                     # ----------------------------------------------------
                     if xgb_trained and feature_importance_df is not None and hier_broad_summary is not None and not hier_broad_summary.empty: # Check summary exists
                         st.markdown("**Campaign Suggestions (Hierarchical - Broad):**")
@@ -2735,36 +2758,62 @@ if st.session_state.data is not None:
                         # Calculate overall medians/means safely
                         overall_median_income = hier_broad_summary[income_col_insight].median() if income_col_insight in hier_broad_summary.columns else None
                         overall_median_recency = hier_broad_summary[recency_col_insight].median() if recency_col_insight in hier_broad_summary.columns else None
+                        overall_median_frequency = hier_broad_summary[frequency_col_insight].median() if frequency_col_insight in hier_broad_summary.columns else None # Added
+                        overall_median_monetary = hier_broad_summary[monetary_col_insight].median() if monetary_col_insight in hier_broad_summary.columns else None   # Added
 
                         for cluster_id, profile in hier_broad_summary.iterrows():
                             st.markdown(f"**Cluster {cluster_id} (Size: {profile['Size']:.0f}):**")
                             insights = []
                             # Check column exists in profile before using
-                            if age_col_insight and age_col_insight in profile and profile[age_col_insight] > 55: insights.append("Older.")
-                            elif age_col_insight and age_col_insight in profile and profile[age_col_insight] < 40: insights.append("Younger.")
+                            if age_col_insight and age_col_insight in profile and not pd.isna(profile[age_col_insight]):
+                                if profile[age_col_insight] > 55: insights.append("Older.")
+                                elif profile[age_col_insight] < 40: insights.append("Younger.")
 
-                            # Check overall median was calculable AND column exists in profile
-                            if overall_median_income is not None and income_col_insight in profile:
-                                if profile[income_col_insight] > overall_median_income * 1.1: insights.append("Higher Income.")
-                                elif profile[income_col_insight] < overall_median_income * 0.9: insights.append("Lower Income.")
-                            elif income_col_insight in profile: # If median failed but col exists, note it
-                                insights.append("Avg Income.") # Or some other default
+                            # Income Insight
+                            if overall_median_income is not None and income_col_insight in profile and not pd.isna(profile[income_col_insight]):
+                                if profile[income_col_insight] > overall_median_income * 1.15: insights.append("Higher Income.") # Adjusted threshold slightly
+                                elif profile[income_col_insight] < overall_median_income * 0.85: insights.append("Lower Income.")
+                            elif income_col_insight in profile: insights.append("Avg Income.")
 
-                            if overall_median_recency is not None and recency_col_insight in profile:
+                            # Recency Insight
+                            if overall_median_recency is not None and recency_col_insight in profile and not pd.isna(profile[recency_col_insight]):
                                 if profile[recency_col_insight] < overall_median_recency * 0.8: insights.append("Very Recent.")
                                 elif profile[recency_col_insight] > overall_median_recency * 1.2: insights.append("Less Recent.")
-                            elif recency_col_insight in profile:
-                                insights.append("Avg Recency.")
+                            elif recency_col_insight in profile: insights.append("Avg Recency.")
+
+                            # Frequency Insight (Added)
+                            if overall_median_frequency is not None and frequency_col_insight in profile and not pd.isna(profile[frequency_col_insight]):
+                                if profile[frequency_col_insight] > overall_median_frequency * 1.15: insights.append("High Frequency.")
+                                elif profile[frequency_col_insight] < overall_median_frequency * 0.85: insights.append("Low Frequency.")
+                            elif frequency_col_insight in profile: insights.append("Avg Frequency.")
+
+                            # Monetary Insight (Added)
+                            if overall_median_monetary is not None and monetary_col_insight in profile and not pd.isna(profile[monetary_col_insight]):
+                                if profile[monetary_col_insight] > overall_median_monetary * 1.15: insights.append("High Value.")
+                                elif profile[monetary_col_insight] < overall_median_monetary * 0.85: insights.append("Low Value.")
+                            elif monetary_col_insight in profile: insights.append("Avg Value.")
 
                             suggestions = []
                             # Check column exists in important_features list AND insights were generated
-                            if income_col_insight in important_features and "Higher Income." in insights: suggestions.append("Premium offers.")
-                            if recency_col_insight in important_features and "Less Recent." in insights: suggestions.append("Reactivation.")
-                            if recency_col_insight in important_features and "Very Recent." in insights: suggestions.append("Loyalty/Welcome.")
-                            # ... add more rules ...
+                            # Suggestion rules based on importance AND profile characteristics
+                            if income_col_insight in important_features and "Higher Income." in insights: suggestions.append("Premium offers (Income driven).")
+                            if recency_col_insight in important_features and "Less Recent." in insights: suggestions.append("Reactivation (Recency driven).")
+                            if recency_col_insight in important_features and "Very Recent." in insights: suggestions.append("Loyalty/Welcome (Recency driven).")
+                            if frequency_col_insight in important_features and "High Frequency." in insights: suggestions.append("Frequent buyer perks (Frequency driven).") # Added
+                            if monetary_col_insight in important_features and "High Value." in insights: suggestions.append("High value customer treatment (Value driven).") # Added
+
+                            # Fallback suggestions if key drivers don't match profile strongly
+                            if not suggestions:
+                                if "High Value." in insights or "Higher Income." in insights: suggestions.append("Consider Premium/Value focus.")
+                                if "High Frequency." in insights: suggestions.append("Consider Frequency focus.")
+                                if "Less Recent." in insights: suggestions.append("Consider Reactivation focus.")
+                                if "Very Recent." in insights: suggestions.append("Consider Loyalty/Welcome focus.")
+
                             if not insights: insights.append("Avg profile.")
-                            if not suggestions: suggestions.append("Standard.")
+                            if not suggestions: suggestions.append("Standard offers.") # Default suggestion
                             st.write(f"- **Profile:** {' '.join(insights)} **Suggestions:** {' '.join(suggestions)}")
+
+                            
                     elif hier_broad_summary is None or hier_broad_summary.empty:
                         st.info("Broad summary table missing, cannot generate suggestions.")
                     elif xgb_trained and feature_importance_df is None:
@@ -2780,14 +2829,11 @@ if st.session_state.data is not None:
             st.markdown("---")
             st.markdown("#### K-Means Clustering (Broad)")
             if data_kmeans_insights is not None:
-                cols_for_broad = core_cols + broad_agg_cols
+                cols_for_broad = broad_cols
                 kmeans_broad_summary = get_cluster_summary(data_kmeans_insights, 'KMeans_Cluster', cols_for_broad)
                 if not kmeans_broad_summary.empty:
                     st.dataframe(kmeans_broad_summary.style.format("{:,.1f}").background_gradient(cmap='viridis', axis=0))
                     # Campaign Suggestions (using broad summary)
-                    # --- Re-define key column names here for safety ---
-                    income_col_insight = 'Income'
-                    recency_col_insight = 'Recency'
                     # ----------------------------------------------------
                     if xgb_trained and feature_importance_df is not None and kmeans_broad_summary is not None and not kmeans_broad_summary.empty: # Check summary exists
                         st.markdown("**Campaign Suggestions (K-Means - Broad):**")
@@ -2795,47 +2841,63 @@ if st.session_state.data is not None:
                         st.write(f"*Top driving features (XGBoost):* `{', '.join(important_features)}`")
 
                         # Calculate overall medians/means safely
-                        # Ensure the column name variable exists AND the column is in the DataFrame
                         overall_median_income_km = kmeans_broad_summary[income_col_insight].median() if income_col_insight in kmeans_broad_summary.columns else None
                         overall_median_recency_km = kmeans_broad_summary[recency_col_insight].median() if recency_col_insight in kmeans_broad_summary.columns else None
-                    if xgb_trained and feature_importance_df is not None and kmeans_broad_summary is not None and not kmeans_broad_summary.empty: # Check summary exists
-                        st.markdown("**Campaign Suggestions (K-Means - Broad):**")
-                        important_features = feature_importance_df['Feature'].head(5).tolist()
-                        st.write(f"*Top driving features (XGBoost):* `{', '.join(important_features)}`")
-
-                        # Calculate overall medians/means safely
-                        overall_median_income_km = kmeans_broad_summary[income_col_insight].median() if income_col_insight in kmeans_broad_summary.columns else None
-                        overall_median_recency_km = kmeans_broad_summary[recency_col_insight].median() if recency_col_insight in kmeans_broad_summary.columns else None
+                        overall_median_frequency_km = kmeans_broad_summary[frequency_col_insight].median() if recency_col_insight in kmeans_broad_summary.columns else None
+                        overall_median_monetary_km = kmeans_broad_summary[monetary_col_insight].median() if recency_col_insight in kmeans_broad_summary.columns else None
 
                         for cluster_id, profile in kmeans_broad_summary.iterrows():
                             st.markdown(f"**Cluster {cluster_id} (Size: {profile['Size']:.0f}):**")
                             insights = []
                             # Check column exists in profile before using
-                            if age_col_insight and age_col_insight in profile and profile[age_col_insight] > 55: insights.append("Older.")
-                            elif age_col_insight and age_col_insight in profile and profile[age_col_insight] < 40: insights.append("Younger.")
+                            if age_col_insight and age_col_insight in profile and not pd.isna(profile[age_col_insight]):
+                                if profile[age_col_insight] > 55: insights.append("Older.")
+                                elif profile[age_col_insight] < 40: insights.append("Younger.")
 
-                            # Check overall median was calculable AND column exists in profile
-                            if overall_median_income_km is not None and income_col_insight in profile:
-                                if profile[income_col_insight] > overall_median_income_km * 1.1: insights.append("Higher Income.")
-                                elif profile[income_col_insight] < overall_median_income_km * 0.9: insights.append("Lower Income.")
-                            elif income_col_insight in profile:
-                                insights.append("Avg Income.")
+                            # Income Insight
+                            if overall_median_income_km is not None and income_col_insight in profile and not pd.isna(profile[income_col_insight]):
+                                if profile[income_col_insight] > overall_median_income_km * 1.15: insights.append("Higher Income.")
+                                elif profile[income_col_insight] < overall_median_income_km * 0.85: insights.append("Lower Income.")
+                            elif income_col_insight in profile: insights.append("Avg Income.")
 
-                            if overall_median_recency_km is not None and recency_col_insight in profile:
+                            # Recency Insight
+                            if overall_median_recency_km is not None and recency_col_insight in profile and not pd.isna(profile[recency_col_insight]):
                                 if profile[recency_col_insight] < overall_median_recency_km * 0.8: insights.append("Very Recent.")
                                 elif profile[recency_col_insight] > overall_median_recency_km * 1.2: insights.append("Less Recent.")
-                            elif recency_col_insight in profile:
-                                insights.append("Avg Recency.")
+                            elif recency_col_insight in profile: insights.append("Avg Recency.")
+
+                            # Frequency Insight (Added)
+                            if overall_median_frequency_km is not None and frequency_col_insight in profile and not pd.isna(profile[frequency_col_insight]):
+                                if profile[frequency_col_insight] > overall_median_frequency_km * 1.15: insights.append("High Frequency.")
+                                elif profile[frequency_col_insight] < overall_median_frequency_km * 0.85: insights.append("Low Frequency.")
+                            elif frequency_col_insight in profile: insights.append("Avg Frequency.")
+
+                            # Monetary Insight (Added)
+                            if overall_median_monetary_km is not None and monetary_col_insight in profile and not pd.isna(profile[monetary_col_insight]):
+                                if profile[monetary_col_insight] > overall_median_monetary_km * 1.15: insights.append("High Value.")
+                                elif profile[monetary_col_insight] < overall_median_monetary_km * 0.85: insights.append("Low Value.")
+                            elif monetary_col_insight in profile: insights.append("Avg Value.")
 
                             suggestions = []
-                            # Check column exists in important_features list AND insights were generated
-                            if income_col_insight in important_features and "Higher Income." in insights: suggestions.append("Premium offers.")
-                            if recency_col_insight in important_features and "Less Recent." in insights: suggestions.append("Reactivation.")
-                            if recency_col_insight in important_features and "Very Recent." in insights: suggestions.append("Loyalty/Welcome.")
-                            # ... add more rules ...
+                            # Suggestion rules based on importance AND profile characteristics
+                            if income_col_insight in important_features and "Higher Income." in insights: suggestions.append("Premium offers (Income driven).")
+                            if recency_col_insight in important_features and "Less Recent." in insights: suggestions.append("Reactivation (Recency driven).")
+                            if recency_col_insight in important_features and "Very Recent." in insights: suggestions.append("Loyalty/Welcome (Recency driven).")
+                            if frequency_col_insight in important_features and "High Frequency." in insights: suggestions.append("Frequent buyer perks (Frequency driven).") # Added
+                            if monetary_col_insight in important_features and "High Value." in insights: suggestions.append("High value customer treatment (Value driven).") # Added
+
+                            # Fallback suggestions if key drivers don't match profile strongly
+                            if not suggestions:
+                                if "High Value." in insights or "Higher Income." in insights: suggestions.append("Consider Premium/Value focus.")
+                                if "High Frequency." in insights: suggestions.append("Consider Frequency focus.")
+                                if "Less Recent." in insights: suggestions.append("Consider Reactivation focus.")
+                                if "Very Recent." in insights: suggestions.append("Consider Loyalty/Welcome focus.")
+
                             if not insights: insights.append("Avg profile.")
-                            if not suggestions: suggestions.append("Standard.")
+                            if not suggestions: suggestions.append("Standard offers.") # Default suggestion
                             st.write(f"- **Profile:** {' '.join(insights)} **Suggestions:** {' '.join(suggestions)}")
+
+
                     elif kmeans_broad_summary is None or kmeans_broad_summary.empty:
                         st.info("Broad summary table missing, cannot generate suggestions.")
                     elif xgb_trained and feature_importance_df is None:
@@ -2855,7 +2917,7 @@ if st.session_state.data is not None:
             # --- Column Selection Text Box ---
             st.markdown("##### Select Columns to Display in Profiles")
             # Provide default columns
-            default_cols_display = core_cols + broad_agg_cols[:1] # e.g., Age, Income, Recency, Frequency
+            default_cols_display = broad_cols # e.g., Age, Income, Recency, Frequency
             cols_list_str = ", ".join(all_detailed_cols)
             st.text(f"Available columns: {cols_list_str}")
             user_cols_input = st.text_area(
@@ -2899,6 +2961,7 @@ if st.session_state.data is not None:
                     if not display_cols_hier or (len(display_cols_hier) == 1 and display_cols_hier[0] == 'Size'):
                         st.warning("No valid data columns selected for display in profile.")
                     else:
+                        st.write()
                         st.dataframe(hier_detailed_summary[display_cols_hier].style.format("{:,.1f}").background_gradient(cmap='viridis', axis=0))
                 else:
                     st.warning("Could not generate detailed summary for Hierarchical clusters.")
